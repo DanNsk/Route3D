@@ -5,6 +5,7 @@ using System.Xml.Serialization;
 
 namespace Route3D.Helpers
 {
+
     /// <summary>
     /// Creates a serializable string for generic types that is XML serializable.
     /// 
