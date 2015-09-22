@@ -1,0 +1,25 @@
+﻿<Window x:Class="Route3D.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:h="http://helix-toolkit.org/wpf"
+        xmlns:m="clr-namespace:Route3D.Helpers"
+        Title="{Binding Title}" Height="700  " Width="1000" WindowStartupLocation="CenterScreen">
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Open..." Command="{Binding FileOpenCommand}"/>
+                <Separator/>
+                <MenuItem Header="E_xit" Command="{Binding FileExitCommand}"/>
+            </MenuItem>
+        </Menu>
+        <h:HelixViewport3D x:Name="viewPort3d" IsMoveEnabled="False" IsPanEnabled="False" IsRotationEnabled="True" IsZoomEnabled="True" ShowViewCube="False" ShowCoordinateSystem="True" CameraRotationMode="Turntable" CameraMode="Inspect">
+            <h:HelixViewport3D.Camera>
+                <PerspectiveCamera Position="-300, -300, 150"  LookDirection="300,300,-150" UpDirection="0, 0, 1" FieldOfView="60"  />
+            </h:HelixViewport3D.Camera>
+
+            <h:SunLight/>
+            <ModelVisual3D Content="{Binding CurrentModel}" Transform="{h:Translate 0,0,-45}"/>
+            <h:LinesVisual3D Thickness="1" Points="{  Binding GridLinePoints  }"></h:LinesVisual3D>
+        </h:HelixViewport3D>
+    </DockPanel>
+</Window>
