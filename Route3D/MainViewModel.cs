@@ -131,13 +131,12 @@ namespace Route3D
 
                     List<List<Point3D>> xpaths = null;
 
-
                     for (double i = bounds.Location.Z + bounds.Size.Z; i >= bounds.Location.Z; i -= step)
                     {
 
                         var modl = MeshGeometryHelper.Cut(MeshGeometryHelper.Cut((MeshGeometry3D)geom.Geometry, new Point3D(0, 0, i - step), new Vector3D(0, 0, 1)), new Point3D(0, 0, i), new Vector3D(0, 0, -1));
 
-                        modl.JoinCloseIndices(EPSILON);
+                        modl.JoinNearIndices(EPSILON);
 
                         var des = modl.FindBottomContours(EPSILON);
 
@@ -196,24 +195,32 @@ namespace Route3D
 
 
 
-                        var colors = typeof (Colors).GetProperties(BindingFlags.Static | BindingFlags.Public).Where(p=>p.PropertyType == typeof(Color)).Select(p=>(Color)p.GetValue(null)).ToList();
+                        
 
-                        List<List<Point3D>> paths1 = paths.CloseMergePaths(modl.Positions, EPSILON).Select(x=>x.Select(y=>modl.Positions[y]).ToList()).ToList();
+                        List<List<Point3D>> paths1 = paths.FixMergeIndexPaths(modl.Positions, EPSILON).Select(x=>x.Select(y=>modl.Positions[y]).ToList()).ToList();
 
-                        xpaths = xpaths.ClipPaths(paths1, ClipType.Union, i, EPSILON);
+                        xpaths = xpaths.ClipPaths(paths1, ClipType.Union, i, EPSILON).FixPointPaths();
 
                         var mb = new MeshBuilder();
 
 
                         foreach (var path in xpaths)
                         {
+
                             mb.AddTube(path, 1, 8, true);
                         }
 
-                        model3DGroup.Children.Add(new GeometryModel3D { Geometry = mb.ToMesh(true), Material = MaterialHelper.CreateMaterial(colors[rand.Next(colors.Count - 1)]) });
+
+                        model3DGroup.Children.Add(new GeometryModel3D { Geometry = mb.ToMesh(true), Material = MaterialHelper.CreateMaterial(GeometryHelper.GoodColors[rand.Next(GeometryHelper.GoodColors.Count - 1)]) });
+
+
+                      
                     }
 
+                                   
+
                 }
+
 
                 res = model3DGroup;
             }

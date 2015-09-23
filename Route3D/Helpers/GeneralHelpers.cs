@@ -8,7 +8,7 @@ namespace Route3D.Helpers
 {
     public static class GeneralHelpers
     {
-        public static void Exchange<T>(ref T a, ref T b)
+        public static void Swap<T>(ref T a, ref T b)
         {
             var t = a;
             a = b;

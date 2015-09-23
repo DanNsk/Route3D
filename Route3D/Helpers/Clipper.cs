@@ -1,430 +1,186 @@
-﻿using System;
+﻿/*******************************************************************************
+*                                                                              *
+* Author    :  Angus Johnson                                                   *
+* Version   :  6.2.1                                                           *
+* Date      :  31 October 2014                                                 *
+* Website   :  http://www.angusj.com                                           *
+* Copyright :  Angus Johnson 2010-2014                                         *
+*                                                                              *
+* License:                                                                     *
+* Use, modification & distribution is subject to Boost Software License Ver 1. *
+* http://www.boost.org/LICENSE_1_0.txt                                         *
+*                                                                              *
+* Attributions:                                                                *
+* The code in this library is an extension of Bala Vatti's clipping algorithm: *
+* "A generic solution to polygon clipping"                                     *
+* Communications of the ACM, Vol 35, Issue 7 (July 1992) pp 56-63.             *
+* http://portal.acm.org/citation.cfm?id=129906                                 *
+*                                                                              *
+* Computer graphics and geometric modeling: implementation and algorithms      *
+* By Max K. Agoston                                                            *
+* Springer; 1 edition (January 4, 2005)                                        *
+* http://books.google.com/books?q=vatti+clipping+agoston                       *
+*                                                                              *
+*******************************************************************************/
+
+
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 
 namespace Route3D.Helpers
 {
-    public class PolyTree : PolyNode
+    public enum ClipType
     {
-        internal List<PolyNode> m_AllPolys = new List<PolyNode>();
-
-        ~PolyTree()
-        {
-            Clear();
-        }
-
-        public void Clear()
-        {
-            for (int i = 0; i < m_AllPolys.Count; i++)
-                m_AllPolys[i] = null;
-            m_AllPolys.Clear();
-            m_Childs.Clear();
-        }
-
-        public PolyNode GetFirst()
-        {
-            if (m_Childs.Count > 0)
-                return m_Childs[0];
-            else
-                return null;
-        }
-
-        public int Total
-        {
-            get
-            {
-                int result = m_AllPolys.Count;
-                //with negative offsets, ignore the hidden outer polygon ...
-                if (result > 0 && m_Childs[0] != m_AllPolys[0]) result--;
-                return result;
-            }
-        }
-
-    }
-
-    public class PolyNode
-    {
-        internal PolyNode m_Parent;
-        internal List<IntPoint> m_polygon = new List<IntPoint>();
-        internal int m_Index;
-        internal JoinType m_jointype;
-        internal EndType m_endtype;
-        internal List<PolyNode> m_Childs = new List<PolyNode>();
-
-        private bool IsHoleNode()
-        {
-            bool result = true;
-            PolyNode node = m_Parent;
-            while (node != null)
-            {
-                result = !result;
-                node = node.m_Parent;
-            }
-            return result;
-        }
-
-        public int ChildCount
-        {
-            get { return m_Childs.Count; }
-        }
-
-        public List<IntPoint> Contour
-        {
-            get { return m_polygon; }
-        }
-
-        internal void AddChild(PolyNode Child)
-        {
-            int cnt = m_Childs.Count;
-            m_Childs.Add(Child);
-            Child.m_Parent = this;
-            Child.m_Index = cnt;
-        }
-
-        public PolyNode GetNext()
-        {
-            if (m_Childs.Count > 0)
-                return m_Childs[0];
-            else
-                return GetNextSiblingUp();
-        }
-
-        internal PolyNode GetNextSiblingUp()
-        {
-            if (m_Parent == null)
-                return null;
-            else if (m_Index == m_Parent.m_Childs.Count - 1)
-                return m_Parent.GetNextSiblingUp();
-            else
-                return m_Parent.m_Childs[m_Index + 1];
-        }
-
-        public List<PolyNode> Childs
-        {
-            get { return m_Childs; }
-        }
-
-        public PolyNode Parent
-        {
-            get { return m_Parent; }
-        }
-
-        public bool IsHole
-        {
-            get { return IsHoleNode(); }
-        }
-
-        public bool IsOpen { get; set; }
-    }
-
-
-    //------------------------------------------------------------------------------
-    // Int128 struct (enables safe math on signed 64bit integers)
-    // eg Int128 val1((long)9223372036854775807); //ie 2^63 -1
-    //    Int128 val2((long)9223372036854775807);
-    //    Int128 val3 = val1 * val2;
-    //    val3.ToString => "85070591730234615847396907784232501249" (8.5e+37)
-    //------------------------------------------------------------------------------
-
-    internal struct Int128
-    {
-        private long hi;
-        private ulong lo;
-
-        public Int128(long _lo)
-        {
-            lo = (ulong)_lo;
-            if (_lo < 0) hi = -1;
-            else hi = 0;
-        }
-
-        public Int128(long _hi, ulong _lo)
-        {
-            lo = _lo;
-            hi = _hi;
-        }
-
-        public Int128(Int128 val)
-        {
-            hi = val.hi;
-            lo = val.lo;
-        }
-
-        public bool IsNegative()
-        {
-            return hi < 0;
-        }
-
-        public static bool operator ==(Int128 val1, Int128 val2)
-        {
-            if ((object)val1 == (object)val2) return true;
-
-            return (val1.hi == val2.hi && val1.lo == val2.lo);
-        }
-
-        public static bool operator !=(Int128 val1, Int128 val2)
-        {
-            return !(val1 == val2);
-        }
-
-        public override bool Equals(Object obj)
-        {
-            if (!(obj is Int128))
-                return false;
-            Int128 i128 = (Int128)obj;
-            return (i128.hi == hi && i128.lo == lo);
-        }
-
-        public override int GetHashCode()
-        {
-            return hi.GetHashCode() ^ lo.GetHashCode();
-        }
-
-        public static bool operator >(Int128 val1, Int128 val2)
-        {
-            if (val1.hi != val2.hi)
-                return val1.hi > val2.hi;
-            else
-                return val1.lo > val2.lo;
-        }
-
-        public static bool operator <(Int128 val1, Int128 val2)
-        {
-            if (val1.hi != val2.hi)
-                return val1.hi < val2.hi;
-            else
-                return val1.lo < val2.lo;
-        }
-
-        public static Int128 operator +(Int128 lhs, Int128 rhs)
-        {
-            lhs.hi += rhs.hi;
-            lhs.lo += rhs.lo;
-            if (lhs.lo < rhs.lo) lhs.hi++;
-            return lhs;
-        }
-
-        public static Int128 operator -(Int128 lhs, Int128 rhs)
-        {
-            return lhs + -rhs;
-        }
-
-        public static Int128 operator -(Int128 val)
-        {
-            if (val.lo == 0)
-                return new Int128(-val.hi, 0);
-            else
-                return new Int128(~val.hi, ~val.lo + 1);
-        }
-
-        public static explicit operator double(Int128 val)
-        {
-            const double shift64 = 18446744073709551616.0; //2^64
-            if (val.hi < 0)
-            {
-                if (val.lo == 0)
-                    return val.hi * shift64;
-                else
-                    return -(~val.lo + ~val.hi * shift64);
-            }
-            else
-                return (val.lo + val.hi * shift64);
-        }
-
-        //nb: Constructing two new Int128 objects every time we want to multiply longs  
-        //is slow. So, although calling the Int128Mul method doesn't look as clean, the 
-        //code runs significantly faster than if we'd used the * operator.
-
-        public static Int128 Int128Mul(long lhs, long rhs)
-        {
-            bool negate = (lhs < 0) != (rhs < 0);
-            if (lhs < 0) lhs = -lhs;
-            if (rhs < 0) rhs = -rhs;
-            ulong int1Hi = (ulong)lhs >> 32;
-            ulong int1Lo = (ulong)lhs & 0xFFFFFFFF;
-            ulong int2Hi = (ulong)rhs >> 32;
-            ulong int2Lo = (ulong)rhs & 0xFFFFFFFF;
-
-            //nb: see comments in clipper.pas
-            ulong a = int1Hi * int2Hi;
-            ulong b = int1Lo * int2Lo;
-            ulong c = int1Hi * int2Lo + int1Lo * int2Hi;
-
-            ulong lo;
-            var hi = (long)(a + (c >> 32));
-
-            unchecked { lo = (c << 32) + b; }
-            if (lo < b) hi++;
-            Int128 result = new Int128(hi, lo);
-            return negate ? -result : result;
-        }
-
+        Intersection,
+        Union,
+        Difference,
+        Xor
     };
 
-    //------------------------------------------------------------------------------
-    //------------------------------------------------------------------------------
-
-    public struct IntPoint
+    public enum PolyType
     {
-        public long X;
-        public long Y;
-
-        public IntPoint(long X, long Y)
-        {
-            this.X = X; this.Y = Y;
-        }
-        public IntPoint(double x, double y)
-        {
-            this.X = (long)x; this.Y = (long)y;
-        }
-
-        public IntPoint(IntPoint pt)
-        {
-            this.X = pt.X; this.Y = pt.Y;
-        }
-
-        public static bool operator ==(IntPoint a, IntPoint b)
-        {
-            return a.X == b.X && a.Y == b.Y;
-        }
-
-        public static bool operator !=(IntPoint a, IntPoint b)
-        {
-            return a.X != b.X || a.Y != b.Y;
-        }
-
-        public override bool Equals(object obj)
-        {
-            if (obj == null) return false;
-            if (obj is IntPoint)
-            {
-                IntPoint a = (IntPoint)obj;
-                return (X == a.X) && (Y == a.Y);
-            }
-            else return false;
-        }
-
-        public override int GetHashCode()
-        {
-            //simply prevents a compiler warning
-            return base.GetHashCode();
-        }
-
-    }// end struct IntPoint
-
-    public struct IntRect
-    {
-        public long left;
-        public long top;
-        public long right;
-        public long bottom;
-
-        public IntRect(long l, long t, long r, long b)
-        {
-            this.left = l; this.top = t;
-            this.right = r; this.bottom = b;
-        }
-        public IntRect(IntRect ir)
-        {
-            this.left = ir.left; this.top = ir.top;
-            this.right = ir.right; this.bottom = ir.bottom;
-        }
-    }
-
-    public enum ClipType { Intersection, Union, Difference, Xor };
-    public enum PolyType { Subject, Clip };
+        Subject,
+        Clip
+    };
 
     //By far the most widely used winding rules for polygon filling are
     //EvenOdd & NonZero (GDI, GDI+, XLib, OpenGL, Cairo, AGG, Quartz, SVG, Gr32)
     //Others rules include Positive, Negative and ABS_GTR_EQ_TWO (only in OpenGL)
     //see http://glprogramming.com/red/chapter11.html
-    public enum PolyFillType { EvenOdd, NonZero, Positive, Negative };
-
-    public enum JoinType { Square, Round, Miter };
-    public enum EndType { ClosedPolygon, ClosedLine, OpenButt, OpenSquare, OpenRound };
-
-    internal enum EdgeSide { Left, Right };
-    internal enum Direction { RightToLeft, LeftToRight };
-
-    internal class TEdge
+    public enum PolyFillType
     {
-        internal IntPoint Bot;
-        internal IntPoint Curr;
-        internal IntPoint Top;
-        internal IntPoint Delta;
-        internal double Dx;
-        internal PolyType PolyTyp;
-        internal EdgeSide Side;
-        internal int WindDelta; //1 or -1 depending on winding direction
-        internal int WindCnt;
-        internal int WindCnt2; //winding count of the opposite polytype
-        internal int OutIdx;
-        internal TEdge Next;
-        internal TEdge Prev;
-        internal TEdge NextInLML;
-        internal TEdge NextInAEL;
-        internal TEdge PrevInAEL;
-        internal TEdge NextInSEL;
-        internal TEdge PrevInSEL;
+        EvenOdd,
+        NonZero,
+        Positive,
+        Negative
+    };
+
+    public enum JoinType
+    {
+        Square,
+        Round,
+        Miter
+    };
+
+    public enum EndType
+    {
+        ClosedPolygon,
+        ClosedLine,
+        OpenButt,
+        OpenSquare,
+        OpenRound
+    };
+
+    public  enum EdgeSide
+    {
+        Left,
+        Right
+    };
+
+    public enum Direction
+    {
+        RightToLeft,
+        LeftToRight
+    };
+
+    public class TEdge
+    {
+        public  Point Bot;
+        public  Point Curr;
+        public  Point Delta;
+        public  double Dx;
+        public  TEdge Next;
+        public  TEdge NextInAEL;
+        public  TEdge NextInLML;
+        public  TEdge NextInSEL;
+        public  int OutIdx;
+        public  PolyType PolyTyp;
+        public  TEdge Prev;
+        public  TEdge PrevInAEL;
+        public  TEdge PrevInSEL;
+        public  EdgeSide Side;
+        public  Point Top;
+        public  int WindCnt;
+        public  int WindCnt2; //winding count of the opposite polytype
+        public  int WindDelta; //1 or -1 depending on winding direction
     };
 
     public class IntersectNode
     {
-        internal TEdge Edge1;
-        internal TEdge Edge2;
-        internal IntPoint Pt;
+        public  TEdge Edge1;
+        public  TEdge Edge2;
+        public  Point Pt;
     };
 
     public class MyIntersectNodeSort : IComparer<IntersectNode>
     {
         public int Compare(IntersectNode node1, IntersectNode node2)
         {
-            long i = node2.Pt.Y - node1.Pt.Y;
+            var i = node2.Pt.Y - node1.Pt.Y;
             if (i > 0) return 1;
             else if (i < 0) return -1;
             else return 0;
         }
     }
 
-    internal class LocalMinima
+    public class LocalMinima
     {
-        internal long Y;
-        internal TEdge LeftBound;
-        internal TEdge RightBound;
-        internal LocalMinima Next;
+        public  TEdge LeftBound;
+        public  LocalMinima Next;
+        public  TEdge RightBound;
+        public  double Y;
     };
 
-    internal class Scanbeam
+    public class Scanbeam
     {
-        internal long Y;
-        internal Scanbeam Next;
+        public  Scanbeam Next;
+        public  double Y;
     };
 
-    internal class OutRec
+    public class OutRec
     {
-        internal int Idx;
-        internal bool IsHole;
-        internal bool IsOpen;
-        internal OutRec FirstLeft; //see comments in clipper.pas
-        internal OutPt Pts;
-        internal OutPt BottomPt;
-        internal PolyNode PolyNode;
+        public  OutPt BottomPt;
+        public  OutRec FirstLeft; //see comments in clipper.pas
+        public  int Idx;
+        public  bool IsHole;
+        public  bool IsOpen;
+        public  OutPt Pts;
     };
 
-    internal class OutPt
+    public class OutPt : IEnumerable<Point>
     {
-        internal int Idx;
-        internal IntPoint Pt;
-        internal OutPt Next;
-        internal OutPt Prev;
+        public  int Idx;
+        public  OutPt Next;
+        public  OutPt Prev;
+        public  Point Pt;
+
+        public IEnumerator<Point> GetEnumerator()
+        {
+            yield return Pt;
+
+            var start = this;
+            var op = start;
+
+            while((op = op.Next) != start)
+            {
+                yield return op.Pt;
+            }
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
     };
 
-    internal class Join
+    public  class Join
     {
-        internal OutPt OutPt1;
-        internal OutPt OutPt2;
-        internal IntPoint OffPt;
+        public  Point OffPt;
+        public  OutPt OutPt1;
+        public  OutPt OutPt2;
     };
 
     public class ClipperBase
@@ -432,179 +188,83 @@ namespace Route3D.Helpers
         protected const double horizontal = -3.4E+38;
         protected const int Skip = -2;
         protected const int Unassigned = -1;
-        protected const double tolerance = 1.0E-20;
-        internal static bool near_zero(double val) { return (val > -tolerance) && (val < tolerance); }
-
-
-        public const long loRange = 0x3FFFFFFF;
-        public const long hiRange = 0x3FFFFFFFFFFFFFFFL;
-
-        internal LocalMinima m_MinimaList;
-        internal LocalMinima m_CurrentLM;
-        internal List<List<TEdge>> m_edges = new List<List<TEdge>>();
-        internal bool m_UseFullRange;
-        internal bool m_HasOpenPaths;
+        protected  LocalMinima m_CurrentLM;
+        protected  List<List<TEdge>> m_edges = new List<List<TEdge>>();
+        protected  LocalMinima m_MinimaList;
 
         //------------------------------------------------------------------------------
 
-        public bool PreserveCollinear
-        {
-            get;
-            set;
-        }
-        //------------------------------------------------------------------------------
-
-        public void Swap(ref long val1, ref long val2)
-        {
-            long tmp = val1;
-            val1 = val2;
-            val2 = tmp;
-        }
-        //------------------------------------------------------------------------------
-
-        internal static bool IsHorizontal(TEdge e)
-        {
-            return e.Delta.Y == 0;
-        }
-        //------------------------------------------------------------------------------
-
-        internal bool PointIsVertex(IntPoint pt, OutPt pp)
-        {
-            OutPt pp2 = pp;
-            do
-            {
-                if (pp2.Pt == pt) return true;
-                pp2 = pp2.Next;
-            }
-            while (pp2 != pp);
-            return false;
-        }
-        //------------------------------------------------------------------------------
-
-        internal bool PointOnLineSegment(IntPoint pt,
-            IntPoint linePt1, IntPoint linePt2, bool UseFullRange)
-        {
-            if (UseFullRange)
-                return ((pt.X == linePt1.X) && (pt.Y == linePt1.Y)) ||
-                  ((pt.X == linePt2.X) && (pt.Y == linePt2.Y)) ||
-                  (((pt.X > linePt1.X) == (pt.X < linePt2.X)) &&
-                  ((pt.Y > linePt1.Y) == (pt.Y < linePt2.Y)) &&
-                  ((Int128.Int128Mul((pt.X - linePt1.X), (linePt2.Y - linePt1.Y)) ==
-                  Int128.Int128Mul((linePt2.X - linePt1.X), (pt.Y - linePt1.Y)))));
-            else
-                return ((pt.X == linePt1.X) && (pt.Y == linePt1.Y)) ||
-                  ((pt.X == linePt2.X) && (pt.Y == linePt2.Y)) ||
-                  (((pt.X > linePt1.X) == (pt.X < linePt2.X)) &&
-                  ((pt.Y > linePt1.Y) == (pt.Y < linePt2.Y)) &&
-                  ((pt.X - linePt1.X) * (linePt2.Y - linePt1.Y) ==
-                    (linePt2.X - linePt1.X) * (pt.Y - linePt1.Y)));
-        }
-        //------------------------------------------------------------------------------
-
-        internal bool PointOnPolygon(IntPoint pt, OutPt pp, bool UseFullRange)
-        {
-            OutPt pp2 = pp;
-            while (true)
-            {
-                if (PointOnLineSegment(pt, pp2.Pt, pp2.Next.Pt, UseFullRange))
-                    return true;
-                pp2 = pp2.Next;
-                if (pp2 == pp) break;
-            }
-            return false;
-        }
-        //------------------------------------------------------------------------------
-
-        internal static bool SlopesEqual(TEdge e1, TEdge e2, bool UseFullRange)
-        {
-            if (UseFullRange)
-                return Int128.Int128Mul(e1.Delta.Y, e2.Delta.X) ==
-                    Int128.Int128Mul(e1.Delta.X, e2.Delta.Y);
-            else
-                return (e1.Delta.Y) * (e2.Delta.X) == (e1.Delta.X) * (e2.Delta.Y);
-        }
-        //------------------------------------------------------------------------------
-
-        protected static bool SlopesEqual(IntPoint pt1, IntPoint pt2,
-            IntPoint pt3, bool UseFullRange)
-        {
-            if (UseFullRange)
-                return Int128.Int128Mul(pt1.Y - pt2.Y, pt2.X - pt3.X) ==
-                  Int128.Int128Mul(pt1.X - pt2.X, pt2.Y - pt3.Y);
-            else return
-              (pt1.Y - pt2.Y) * (pt2.X - pt3.X) - (pt1.X - pt2.X) * (pt2.Y - pt3.Y) == 0;
-        }
-        //------------------------------------------------------------------------------
-
-        protected static bool SlopesEqual(IntPoint pt1, IntPoint pt2,
-            IntPoint pt3, IntPoint pt4, bool UseFullRange)
-        {
-            if (UseFullRange)
-                return Int128.Int128Mul(pt1.Y - pt2.Y, pt3.X - pt4.X) ==
-                  Int128.Int128Mul(pt1.X - pt2.X, pt3.Y - pt4.Y);
-            else return
-              (pt1.Y - pt2.Y) * (pt3.X - pt4.X) - (pt1.X - pt2.X) * (pt3.Y - pt4.Y) == 0;
-        }
-        //------------------------------------------------------------------------------
-
-        internal ClipperBase() //constructor (nb: no external instantiation)
+        protected ClipperBase() //constructor (nb: no external instantiation)
         {
             m_MinimaList = null;
             m_CurrentLM = null;
-            m_UseFullRange = false;
-            m_HasOpenPaths = false;
         }
+
+        //------------------------------------------------------------------------------
+
+        public bool PreserveCollinear { get; set; }
+
+        //------------------------------------------------------------------------------
+
+
+        protected bool IsHorizontal(TEdge e)
+        {
+            return Math.Abs(e.Delta.Y) < double.Epsilon;
+        }
+
+        //------------------------------------------------------------------------------
+
+
+      
+        protected  bool SlopesEqual(TEdge e1, TEdge e2)
+        {
+            return Math.Abs((e1.Delta.Y)*(e2.Delta.X) - (e1.Delta.X)*(e2.Delta.Y)) < double.Epsilon;
+        }
+
+        //------------------------------------------------------------------------------
+
+        protected static bool SlopesEqual(Point pt1, Point pt2, Point pt3)
+        {
+            return Math.Abs((pt1.Y - pt2.Y)*(pt2.X - pt3.X) - (pt1.X - pt2.X)*(pt2.Y - pt3.Y)) < double.Epsilon;
+        }
+
         //------------------------------------------------------------------------------
 
         public virtual void Clear()
         {
             DisposeLocalMinimaList();
-            for (int i = 0; i < m_edges.Count; ++i)
+            foreach (var t in m_edges)
             {
-                for (int j = 0; j < m_edges[i].Count; ++j) m_edges[i][j] = null;
-                m_edges[i].Clear();
+                for (var j = 0; j < t.Count; ++j) t[j] = null;
+                t.Clear();
             }
             m_edges.Clear();
-            m_UseFullRange = false;
-            m_HasOpenPaths = false;
         }
+
         //------------------------------------------------------------------------------
 
         private void DisposeLocalMinimaList()
         {
             while (m_MinimaList != null)
             {
-                LocalMinima tmpLm = m_MinimaList.Next;
+                var tmpLm = m_MinimaList.Next;
                 m_MinimaList = null;
                 m_MinimaList = tmpLm;
             }
             m_CurrentLM = null;
         }
-        //------------------------------------------------------------------------------
 
-        void RangeTest(IntPoint Pt, ref bool useFullRange)
-        {
-            if (useFullRange)
-            {
-                if (Pt.X > hiRange || Pt.Y > hiRange || -Pt.X > hiRange || -Pt.Y > hiRange)
-                    throw new Exception("Coordinate outside allowed range");
-            }
-            else if (Pt.X > loRange || Pt.Y > loRange || -Pt.X > loRange || -Pt.Y > loRange)
-            {
-                useFullRange = true;
-                RangeTest(Pt, ref useFullRange);
-            }
-        }
         //------------------------------------------------------------------------------
 
         private void InitEdge(TEdge e, TEdge eNext,
-          TEdge ePrev, IntPoint pt)
+            TEdge ePrev, Point pt)
         {
             e.Next = eNext;
             e.Prev = ePrev;
             e.Curr = pt;
             e.OutIdx = Unassigned;
         }
+
         //------------------------------------------------------------------------------
 
         private void InitEdge2(TEdge e, PolyType polyType)
@@ -622,20 +282,21 @@ namespace Route3D.Helpers
             SetDx(e);
             e.PolyTyp = polyType;
         }
+
         //------------------------------------------------------------------------------
 
         private TEdge FindNextLocMin(TEdge E)
         {
-            for (; ; )
+            for (;;)
             {
                 while (E.Bot != E.Prev.Bot || E.Curr == E.Top) E = E.Next;
-                if (Math.Abs(E.Dx - horizontal) > Double.Epsilon && Math.Abs(E.Prev.Dx - horizontal) > Double.Epsilon) break;
-                while (Math.Abs(E.Prev.Dx - horizontal) < Double.Epsilon) E = E.Prev;
+                if (Math.Abs(E.Dx - horizontal) > double.Epsilon && Math.Abs(E.Prev.Dx - horizontal) > double.Epsilon) break;
+                while (Math.Abs(E.Prev.Dx - horizontal) < double.Epsilon) E = E.Prev;
                 var e2 = E;
-                while (Math.Abs(E.Dx - horizontal) < Double.Epsilon)
+                while (Math.Abs(E.Dx - horizontal) < double.Epsilon)
                     E = E.Next;
 
-                if (E.Top.Y == E.Prev.Bot.Y)
+                if (Math.Abs(E.Top.Y - E.Prev.Bot.Y) < double.Epsilon)
                     continue; //ie just an intermediate horz.
 
                 if (e2.Prev.Bot.X < E.Bot.X)
@@ -645,6 +306,7 @@ namespace Route3D.Helpers
             }
             return E;
         }
+
         //------------------------------------------------------------------------------
 
         private TEdge ProcessBound(TEdge E, bool LeftBoundIsForward)
@@ -659,27 +321,25 @@ namespace Route3D.Helpers
                 E = Result;
                 if (LeftBoundIsForward)
                 {
-                    while (E.Top.Y == E.Next.Bot.Y) E = E.Next;
-                    while (E != Result && Math.Abs(E.Dx - horizontal) < Double.Epsilon) E = E.Prev;
+                    while (Math.Abs(E.Top.Y - E.Next.Bot.Y) < double.Epsilon) E = E.Next;
+                    while (E != Result && Math.Abs(E.Dx - horizontal) < double.Epsilon) E = E.Prev;
                 }
                 else
                 {
-                    while (E.Top.Y == E.Prev.Bot.Y) E = E.Prev;
-                    while (E != Result && Math.Abs(E.Dx - horizontal) < Double.Epsilon) E = E.Next;
+                    while (Math.Abs(E.Top.Y - E.Prev.Bot.Y) < double.Epsilon) E = E.Prev;
+                    while (E != Result && Math.Abs(E.Dx - horizontal) < double.Epsilon) E = E.Next;
                 }
                 if (E == Result)
                 {
-                    if (LeftBoundIsForward) Result = E.Next;
-                    else Result = E.Prev;
+                    Result = LeftBoundIsForward ? E.Next : E.Prev;
                 }
                 else
                 {
                     //there are more edges in the bound beyond result starting with E
-                    if (LeftBoundIsForward)
-                        E = Result.Next;
-                    else
-                        E = Result.Prev;
-                    LocalMinima locMin = new LocalMinima
+                    E = LeftBoundIsForward ? Result.Next : Result.Prev;
+
+
+                    var locMin = new LocalMinima
                     {
                         Next = null,
                         Y = E.Bot.Y,
@@ -693,21 +353,20 @@ namespace Route3D.Helpers
                 return Result;
             }
 
-            if (Math.Abs(E.Dx - horizontal) < Double.Epsilon)
+            if (Math.Abs(E.Dx - horizontal) < double.Epsilon)
             {
                 //We need to be careful with open paths because this may not be a
                 //true local minima (ie E may be following a skip edge).
                 //Also, consecutive horz. edges may start heading left before going right.
-                if (LeftBoundIsForward) EStart = E.Prev;
-                else EStart = E.Next;
+                EStart = LeftBoundIsForward ? E.Prev : E.Next;
                 if (EStart.OutIdx != Skip)
                 {
-                    if (Math.Abs(EStart.Dx - horizontal) < Double.Epsilon) //ie an adjoining horizontal skip edge
+                    if (Math.Abs(EStart.Dx - horizontal) < double.Epsilon) //ie an adjoining horizontal skip edge
                     {
-                        if (EStart.Bot.X != E.Bot.X && EStart.Top.X != E.Bot.X)
+                        if (Math.Abs(EStart.Bot.X - E.Bot.X) > double.Epsilon && Math.Abs(EStart.Top.X - E.Bot.X) > double.Epsilon)
                             ReverseHorizontal(E);
                     }
-                    else if (EStart.Bot.X != E.Bot.X)
+                    else if (Math.Abs(EStart.Bot.X - E.Bot.X) > double.Epsilon)
                         ReverseHorizontal(E);
                 }
             }
@@ -715,17 +374,17 @@ namespace Route3D.Helpers
             EStart = E;
             if (LeftBoundIsForward)
             {
-                while (Result.Top.Y == Result.Next.Bot.Y && Result.Next.OutIdx != Skip)
+                while (Math.Abs(Result.Top.Y - Result.Next.Bot.Y) < double.Epsilon && Result.Next.OutIdx != Skip)
                     Result = Result.Next;
-                if (Math.Abs(Result.Dx - horizontal) < Double.Epsilon && Result.Next.OutIdx != Skip)
+                if (Math.Abs(Result.Dx - horizontal) < double.Epsilon && Result.Next.OutIdx != Skip)
                 {
                     //nb: at the top of a bound, horizontals are added to the bound
                     //only when the preceding edge attaches to the horizontal's left vertex
                     //unless a Skip edge is encountered when that becomes the top divide
                     Horz = Result;
-                    while (Math.Abs(Horz.Prev.Dx - horizontal) < Double.Epsilon) Horz = Horz.Prev;
+                    while (Math.Abs(Horz.Prev.Dx - horizontal) < double.Epsilon) Horz = Horz.Prev;
 
-                    if (Horz.Prev.Top.X != Result.Next.Top.X)
+                    if (Math.Abs(Horz.Prev.Top.X - Result.Next.Top.X) > double.Epsilon)
                     {
                         if (Horz.Prev.Top.X > Result.Next.Top.X) Result = Horz.Prev;
                     }
@@ -733,23 +392,23 @@ namespace Route3D.Helpers
                 while (E != Result)
                 {
                     E.NextInLML = E.Next;
-                    if (Math.Abs(E.Dx - horizontal) < Double.Epsilon && E != EStart && E.Bot.X != E.Prev.Top.X)
+                    if (Math.Abs(E.Dx - horizontal) < double.Epsilon && E != EStart && Math.Abs(E.Bot.X - E.Prev.Top.X) > double.Epsilon)
                         ReverseHorizontal(E);
                     E = E.Next;
                 }
-                if (Math.Abs(E.Dx - horizontal) < Double.Epsilon && E != EStart && E.Bot.X != E.Prev.Top.X)
+                if (Math.Abs(E.Dx - horizontal) < double.Epsilon && E != EStart && Math.Abs(E.Bot.X - E.Prev.Top.X) > double.Epsilon)
                     ReverseHorizontal(E);
                 Result = Result.Next; //move to the edge just beyond current bound
             }
             else
             {
-                while (Result.Top.Y == Result.Prev.Bot.Y && Result.Prev.OutIdx != Skip)
+                while (Math.Abs(Result.Top.Y - Result.Prev.Bot.Y) < double.Epsilon && Result.Prev.OutIdx != Skip)
                     Result = Result.Prev;
-                if (Math.Abs(Result.Dx - horizontal) < Double.Epsilon && Result.Prev.OutIdx != Skip)
+                if (Math.Abs(Result.Dx - horizontal) < double.Epsilon && Result.Prev.OutIdx != Skip)
                 {
                     Horz = Result;
-                    while (Math.Abs(Horz.Next.Dx - horizontal) < Double.Epsilon) Horz = Horz.Next;
-                    if (Horz.Next.Top.X == Result.Prev.Top.X)
+                    while (Math.Abs(Horz.Next.Dx - horizontal) < double.Epsilon) Horz = Horz.Next;
+                    if (Math.Abs(Horz.Next.Top.X - Result.Prev.Top.X) < double.Epsilon)
                     {
                         Result = Horz.Next;
                     }
@@ -759,26 +418,23 @@ namespace Route3D.Helpers
                 while (E != Result)
                 {
                     E.NextInLML = E.Prev;
-                    if (Math.Abs(E.Dx - horizontal) < Double.Epsilon && E != EStart && E.Bot.X != E.Next.Top.X)
+                    if (Math.Abs(E.Dx - horizontal) < double.Epsilon && E != EStart && Math.Abs(E.Bot.X - E.Next.Top.X) > double.Epsilon)
                         ReverseHorizontal(E);
                     E = E.Prev;
                 }
-                if (Math.Abs(E.Dx - horizontal) < Double.Epsilon && E != EStart && E.Bot.X != E.Next.Top.X)
+                if (Math.Abs(E.Dx - horizontal) < double.Epsilon && E != EStart && Math.Abs(E.Bot.X - E.Next.Top.X) > double.Epsilon)
                     ReverseHorizontal(E);
                 Result = Result.Prev; //move to the edge just beyond current bound
             }
             return Result;
         }
+
         //------------------------------------------------------------------------------
 
 
-        public bool AddPath(List<IntPoint> pg, PolyType polyType, bool closed)
+        public bool AddPath(List<Point> pg, PolyType polyType)
         {
-            if (!closed)
-                throw new Exception("AddPath: Open paths have been disabled.");
-
-
-            int highI = pg.Count - 1;
+            var highI = pg.Count - 1;
 
             while (highI > 0 && (pg[highI] == pg[0])) --highI;
 
@@ -788,27 +444,25 @@ namespace Route3D.Helpers
                 return false;
 
             //create a new edge array ...
-            List<TEdge> edges = new List<TEdge>(highI + 1);
-            for (int i = 0; i <= highI; i++) edges.Add(new TEdge());
+            var edges = new List<TEdge>(highI + 1);
+            for (var i = 0; i <= highI; i++) edges.Add(new TEdge());
 
-            bool IsFlat = true;
+            var IsFlat = true;
 
             //1. Basic (first) edge initialization ...
             edges[1].Curr = pg[1];
-            RangeTest(pg[0], ref m_UseFullRange);
-            RangeTest(pg[highI], ref m_UseFullRange);
+
             InitEdge(edges[0], edges[1], edges[highI], pg[0]);
             InitEdge(edges[highI], edges[0], edges[highI - 1], pg[highI]);
-            for (int i = highI - 1; i >= 1; --i)
+            for (var i = highI - 1; i >= 1; --i)
             {
-                RangeTest(pg[i], ref m_UseFullRange);
                 InitEdge(edges[i], edges[i + 1], edges[i - 1], pg[i]);
             }
-            TEdge eStart = edges[0];
+            var eStart = edges[0];
 
             //2. Remove duplicate vertices, and (when closed) collinear edges ...
             TEdge E = eStart, eLoopStop = eStart;
-            for (; ; )
+            for (;;)
             {
                 //nb: allows matching start and end points when not Closed ...
                 if (E.Curr == E.Next.Curr)
@@ -821,9 +475,9 @@ namespace Route3D.Helpers
                 }
                 if (E.Prev == E.Next)
                     break; //only two vertices
-                else if (SlopesEqual(E.Prev.Curr, E.Curr, E.Next.Curr, m_UseFullRange) &&
-                  (!PreserveCollinear ||
-                  !Pt2IsBetweenPt1AndPt3(E.Prev.Curr, E.Curr, E.Next.Curr)))
+                else if (SlopesEqual(E.Prev.Curr, E.Curr, E.Next.Curr) &&
+                         (!PreserveCollinear ||
+                          !Pt2IsBetweenPt1AndPt3(E.Prev.Curr, E.Curr, E.Next.Curr)))
                 {
                     //Collinear edges are allowed for open paths but in closed paths
                     //the default is to merge adjacent collinear edges into a single edge.
@@ -848,9 +502,8 @@ namespace Route3D.Helpers
             {
                 InitEdge2(E, polyType);
                 E = E.Next;
-                if (IsFlat && E.Curr.Y != eStart.Curr.Y) IsFlat = false;
-            }
-            while (E != eStart);
+                if (IsFlat && Math.Abs(E.Curr.Y - eStart.Curr.Y) > double.Epsilon) IsFlat = false;
+            } while (E != eStart);
 
             //4. Finally, add edge bounds to LocalMinima list ...
 
@@ -868,7 +521,7 @@ namespace Route3D.Helpers
             //open paths have matching start and end points ...
             if (E.Prev.Bot == E.Prev.Top) E = E.Next;
 
-            for (; ; )
+            for (;;)
             {
                 E = FindNextLocMin(E);
                 if (E == EMin) break;
@@ -876,7 +529,7 @@ namespace Route3D.Helpers
 
                 //E and E.Prev now share a local minima (left aligned if horizontal).
                 //Compare their slopes to find which starts which bound ...
-                LocalMinima locMin = new LocalMinima
+                var locMin = new LocalMinima
                 {
                     Next = null,
                     Y = E.Bot.Y
@@ -905,7 +558,7 @@ namespace Route3D.Helpers
                 E = ProcessBound(locMin.LeftBound, leftBoundIsForward);
                 if (E.OutIdx == Skip) E = ProcessBound(E, leftBoundIsForward);
 
-                TEdge E2 = ProcessBound(locMin.RightBound, !leftBoundIsForward);
+                var E2 = ProcessBound(locMin.RightBound, !leftBoundIsForward);
                 if (E2.OutIdx == Skip) E2 = ProcessBound(E2, !leftBoundIsForward);
 
                 if (locMin.LeftBound.OutIdx == Skip)
@@ -916,47 +569,51 @@ namespace Route3D.Helpers
                 if (!leftBoundIsForward) E = E2;
             }
             return true;
-
         }
+
         //------------------------------------------------------------------------------
 
-        public bool AddPaths(List<List<IntPoint>> ppg, PolyType polyType, bool closed)
+        public bool AddPaths(List<List<Point>> ppg, PolyType polyType)
         {
-            bool result = false;
+            var result = false;
 
-            foreach (List<IntPoint> t in ppg)
-                if (AddPath(t, polyType, closed)) result = true;
+            foreach (var t in ppg)
+                if (AddPath(t, polyType)) result = true;
 
             return result;
         }
+
         //------------------------------------------------------------------------------
 
-        internal bool Pt2IsBetweenPt1AndPt3(IntPoint pt1, IntPoint pt2, IntPoint pt3)
+        protected  bool Pt2IsBetweenPt1AndPt3(Point pt1, Point pt2, Point pt3)
         {
             if ((pt1 == pt3) || (pt1 == pt2) || (pt3 == pt2)) return false;
-            else if (pt1.X != pt3.X) return (pt2.X > pt1.X) == (pt2.X < pt3.X);
+            else if (Math.Abs(pt1.X - pt3.X) > double.Epsilon) return (pt2.X > pt1.X) == (pt2.X < pt3.X);
             else return (pt2.Y > pt1.Y) == (pt2.Y < pt3.Y);
         }
+
         //------------------------------------------------------------------------------
 
-        TEdge RemoveEdge(TEdge e)
+        private TEdge RemoveEdge(TEdge e)
         {
             //removes e from double_linked_list (but without removing from memory)
             e.Prev.Next = e.Next;
             e.Next.Prev = e.Prev;
-            TEdge result = e.Next;
+            var result = e.Next;
             e.Prev = null; //flag as removed (see ClipperBase.Clear)
             return result;
         }
+
         //------------------------------------------------------------------------------
 
         private void SetDx(TEdge e)
         {
             e.Delta.X = (e.Top.X - e.Bot.X);
             e.Delta.Y = (e.Top.Y - e.Bot.Y);
-            if (e.Delta.Y == 0) e.Dx = horizontal;
-            else e.Dx = (double)(e.Delta.X) / (e.Delta.Y);
+            if (Math.Abs(e.Delta.Y) < double.Epsilon) e.Dx = horizontal;
+            else e.Dx = (e.Delta.X)/(e.Delta.Y);
         }
+
         //---------------------------------------------------------------------------
 
         private void InsertLocalMinima(LocalMinima newLm)
@@ -972,13 +629,14 @@ namespace Route3D.Helpers
             }
             else
             {
-                LocalMinima tmpLm = m_MinimaList;
+                var tmpLm = m_MinimaList;
                 while (tmpLm.Next != null && (newLm.Y < tmpLm.Next.Y))
                     tmpLm = tmpLm.Next;
                 newLm.Next = tmpLm.Next;
                 tmpLm.Next = newLm;
             }
         }
+
         //------------------------------------------------------------------------------
 
         protected void PopLocalMinima()
@@ -986,6 +644,7 @@ namespace Route3D.Helpers
             if (m_CurrentLM == null) return;
             m_CurrentLM = m_CurrentLM.Next;
         }
+
         //------------------------------------------------------------------------------
 
         private void ReverseHorizontal(TEdge e)
@@ -993,8 +652,12 @@ namespace Route3D.Helpers
             //swap horizontal edges' top and bottom x's so they follow the natural
             //progression of the bounds - ie so their xbots will align with the
             //adjoining lower edge. [Helpful in the ProcessHorizontal() method.]
-            Swap(ref e.Top.X, ref e.Bot.X);
+
+            var t = e.Top.X;
+            e.Top.X = e.Bot.X;
+            e.Bot.X = t;
         }
+
         //------------------------------------------------------------------------------
 
         protected virtual void Reset()
@@ -1003,10 +666,10 @@ namespace Route3D.Helpers
             if (m_CurrentLM == null) return; //ie nothing to process
 
             //reset all edges ...
-            LocalMinima lm = m_MinimaList;
+            var lm = m_MinimaList;
             while (lm != null)
             {
-                TEdge e = lm.LeftBound;
+                var e = lm.LeftBound;
                 if (e != null)
                 {
                     e.Curr = e.Bot;
@@ -1023,46 +686,22 @@ namespace Route3D.Helpers
                 lm = lm.Next;
             }
         }
-        //------------------------------------------------------------------------------
-
-        public static IntRect GetBounds(List<List<IntPoint>> paths)
-        {
-            int i = 0, cnt = paths.Count;
-            while (i < cnt && paths[i].Count == 0) i++;
-            if (i == cnt) return new IntRect(0, 0, 0, 0);
-            IntRect result = new IntRect();
-            result.left = paths[i][0].X;
-            result.right = result.left;
-            result.top = paths[i][0].Y;
-            result.bottom = result.top;
-            for (; i < cnt; i++)
-                for (int j = 0; j < paths[i].Count; j++)
-                {
-                    if (paths[i][j].X < result.left) result.left = paths[i][j].X;
-                    else if (paths[i][j].X > result.right) result.right = paths[i][j].X;
-                    if (paths[i][j].Y < result.top) result.top = paths[i][j].Y;
-                    else if (paths[i][j].Y > result.bottom) result.bottom = paths[i][j].Y;
-                }
-            return result;
-        }
-
     } //end ClipperBase
 
     public class Clipper : ClipperBase
     {
+        private readonly List<Join> m_GhostJoins;
+        private readonly List<IntersectNode> m_IntersectList;
+        private readonly IComparer<IntersectNode> m_IntersectNodeComparer;
+        private readonly List<Join> m_Joins;
         private readonly List<OutRec> m_PolyOuts;
+        private TEdge m_ActiveEdges;
+        private PolyFillType m_ClipFillType;
         private ClipType m_ClipType;
         private Scanbeam m_Scanbeam;
-        private TEdge m_ActiveEdges;
         private TEdge m_SortedEdges;
-        private readonly List<IntersectNode> m_IntersectList;
-        readonly IComparer<IntersectNode> m_IntersectNodeComparer;
-        private bool m_ExecuteLocked;
-        private PolyFillType m_ClipFillType;
         private PolyFillType m_SubjFillType;
-        private readonly List<Join> m_Joins;
-        private readonly List<Join> m_GhostJoins;
-        private bool m_UsingPolyTree;
+
         public Clipper(bool ioReverseSolution = false, bool ioStrictlySimple = false, bool ioPreserveCollinear = false)
         {
             m_Scanbeam = null;
@@ -1070,26 +709,40 @@ namespace Route3D.Helpers
             m_SortedEdges = null;
             m_IntersectList = new List<IntersectNode>();
             m_IntersectNodeComparer = new MyIntersectNodeSort();
-            m_ExecuteLocked = false;
-            m_UsingPolyTree = false;
             m_PolyOuts = new List<OutRec>();
             m_Joins = new List<Join>();
             m_GhostJoins = new List<Join>();
             ReverseSolution = ioReverseSolution;
-            StrictlySimple = ioStrictlySimple ;
+            StrictlySimple = ioStrictlySimple;
             PreserveCollinear = ioPreserveCollinear;
         }
+
         //------------------------------------------------------------------------------
 
-        void DisposeScanbeamList()
+        public bool ReverseSolution { get; set; }
+
+        //------------------------------------------------------------------------------
+
+        public bool StrictlySimple { get; set; }
+
+        //------------------------------------------------------------------------------
+
+        private void DisposeScanbeamList()
         {
             while (m_Scanbeam != null)
             {
-                Scanbeam sb2 = m_Scanbeam.Next;
+                var sb2 = m_Scanbeam.Next;
                 m_Scanbeam = null;
                 m_Scanbeam = sb2;
             }
         }
+
+        public override void Clear()
+        {
+            DisposeScanbeamList();
+            base.Clear();
+        }
+
         //------------------------------------------------------------------------------
 
         protected override void Reset()
@@ -1098,40 +751,29 @@ namespace Route3D.Helpers
             m_Scanbeam = null;
             m_ActiveEdges = null;
             m_SortedEdges = null;
-            LocalMinima lm = m_MinimaList;
+            var lm = m_MinimaList;
             while (lm != null)
             {
                 InsertScanbeam(lm.Y);
                 lm = lm.Next;
             }
         }
+
         //------------------------------------------------------------------------------
 
-        public bool ReverseSolution
-        {
-            get;
-            set;
-        }
-        //------------------------------------------------------------------------------
-
-        public bool StrictlySimple
-        {
-            get;
-            set;
-        }
-        //------------------------------------------------------------------------------
-
-        private void InsertScanbeam(long Y)
+        private void InsertScanbeam(double Y)
         {
             if (m_Scanbeam == null)
             {
-                m_Scanbeam = new Scanbeam();
-                m_Scanbeam.Next = null;
-                m_Scanbeam.Y = Y;
+                m_Scanbeam = new Scanbeam
+                {
+                    Next = null,
+                    Y = Y
+                };
             }
             else if (Y > m_Scanbeam.Y)
             {
-                Scanbeam newSb = new Scanbeam
+                var newSb = new Scanbeam
                 {
                     Y = Y,
                     Next = m_Scanbeam
@@ -1140,10 +782,10 @@ namespace Route3D.Helpers
             }
             else
             {
-                Scanbeam sb2 = m_Scanbeam;
+                var sb2 = m_Scanbeam;
                 while (sb2.Next != null && (Y <= sb2.Next.Y)) sb2 = sb2.Next;
-                if (Y == sb2.Y) return; //ie ignores duplicates
-                Scanbeam newSb = new Scanbeam
+                if (Math.Abs(Y - sb2.Y) < double.Epsilon) return; //ie ignores duplicates
+                var newSb = new Scanbeam
                 {
                     Y = Y,
                     Next = sb2.Next
@@ -1151,113 +793,80 @@ namespace Route3D.Helpers
                 sb2.Next = newSb;
             }
         }
+
         //------------------------------------------------------------------------------
 
-        public bool Execute(ClipType clipType, List<List<IntPoint>> solution,
+        public bool Execute(ClipType clipType, List<List<Point>> solution,
             PolyFillType subjFillType, PolyFillType clipFillType)
         {
-            if (m_ExecuteLocked) return false;
-            if (m_HasOpenPaths) throw
-              new Exception("Error: PolyTree struct is need for open path clipping.");
-
-            m_ExecuteLocked = true;
+            
             solution.Clear();
             m_SubjFillType = subjFillType;
             m_ClipFillType = clipFillType;
             m_ClipType = clipType;
-            m_UsingPolyTree = false;
             bool succeeded;
             try
             {
-                succeeded = ExecuteInternal();
+                succeeded = Executeprotected ();
                 //build the return polygons ...
                 if (succeeded) BuildResult(solution);
             }
             finally
             {
                 DisposeAllPolyPts();
-                m_ExecuteLocked = false;
             }
             return succeeded;
         }
+
         //------------------------------------------------------------------------------
 
-        public bool Execute(ClipType clipType, PolyTree polytree,
-            PolyFillType subjFillType, PolyFillType clipFillType)
-        {
-            if (m_ExecuteLocked) return false;
-            m_ExecuteLocked = true;
-            m_SubjFillType = subjFillType;
-            m_ClipFillType = clipFillType;
-            m_ClipType = clipType;
-            m_UsingPolyTree = true;
-            bool succeeded;
-            try
-            {
-                succeeded = ExecuteInternal();
-                //build the return polygons ...
-                if (succeeded) BuildResult2(polytree);
-            }
-            finally
-            {
-                DisposeAllPolyPts();
-                m_ExecuteLocked = false;
-            }
-            return succeeded;
-        }
-        //------------------------------------------------------------------------------
-
-        public bool Execute(ClipType clipType, List<List<IntPoint>> solution)
+        public bool Execute(ClipType clipType, List<List<Point>> solution)
         {
             return Execute(clipType, solution,
                 PolyFillType.EvenOdd, PolyFillType.EvenOdd);
         }
+
         //------------------------------------------------------------------------------
 
-        public bool Execute(ClipType clipType, PolyTree polytree)
-        {
-            return Execute(clipType, polytree,
-                PolyFillType.EvenOdd, PolyFillType.EvenOdd);
-        }
-        //------------------------------------------------------------------------------
 
-        internal void FixHoleLinkage(OutRec outRec)
+        protected  void FixHoleLinkage(OutRec outRec)
         {
             //skip if an outermost polygon or
             //already already points to the correct FirstLeft ...
             if (outRec.FirstLeft == null ||
-                  (outRec.IsHole != outRec.FirstLeft.IsHole &&
-                  outRec.FirstLeft.Pts != null)) return;
+                (outRec.IsHole != outRec.FirstLeft.IsHole &&
+                 outRec.FirstLeft.Pts != null)) return;
 
-            OutRec orfl = outRec.FirstLeft;
+            var orfl = outRec.FirstLeft;
             while (orfl != null && ((orfl.IsHole == outRec.IsHole) || orfl.Pts == null))
                 orfl = orfl.FirstLeft;
             outRec.FirstLeft = orfl;
         }
+
         //------------------------------------------------------------------------------
 
-        private bool ExecuteInternal()
+        private bool Executeprotected ()
         {
             try
             {
                 Reset();
                 if (m_CurrentLM == null) return false;
 
-                long botY = PopScanbeam();
+                var botY = PopScanbeam();
                 do
                 {
                     InsertLocalMinimaIntoAEL(botY);
                     m_GhostJoins.Clear();
                     ProcessHorizontals(false);
                     if (m_Scanbeam == null) break;
-                    long topY = PopScanbeam();
+                    var topY = PopScanbeam();
                     if (!ProcessIntersections(topY)) return false;
                     ProcessEdgesAtTopOfScanbeam(topY);
                     botY = topY;
                 } while (m_Scanbeam != null || m_CurrentLM != null);
 
                 //fix orientations ...
-                foreach (OutRec outRec in m_PolyOuts)
+                foreach (var outRec in m_PolyOuts)
                 {
                     if (outRec.Pts == null || outRec.IsOpen) continue;
                     if ((outRec.IsHole ^ ReverseSolution) == (Area(outRec) > 0))
@@ -1266,7 +875,7 @@ namespace Route3D.Helpers
 
                 JoinCommonEdges();
 
-                foreach (OutRec outRec in m_PolyOuts)
+                foreach (var outRec in m_PolyOuts)
                 {
                     if (outRec.Pts != null && !outRec.IsOpen)
                         FixupOutPolygon(outRec);
@@ -1275,41 +884,45 @@ namespace Route3D.Helpers
                 if (StrictlySimple) DoSimplePolygons();
                 return true;
             }
-            //catch { return false; }
+                //catch { return false; }
             finally
             {
                 m_Joins.Clear();
                 m_GhostJoins.Clear();
             }
         }
+
         //------------------------------------------------------------------------------
 
-        private long PopScanbeam()
+        private double PopScanbeam()
         {
-            long Y = m_Scanbeam.Y;
+            var Y = m_Scanbeam.Y;
             m_Scanbeam = m_Scanbeam.Next;
             return Y;
         }
+
         //------------------------------------------------------------------------------
 
         private void DisposeAllPolyPts()
         {
-            for (int i = 0; i < m_PolyOuts.Count; ++i) DisposeOutRec(i);
+            for (var i = 0; i < m_PolyOuts.Count; ++i) DisposeOutRec(i);
             m_PolyOuts.Clear();
         }
+
         //------------------------------------------------------------------------------
 
-        void DisposeOutRec(int index)
+        private void DisposeOutRec(int index)
         {
-            OutRec outRec = m_PolyOuts[index];
+            var outRec = m_PolyOuts[index];
             outRec.Pts = null;
             m_PolyOuts[index] = null;
         }
+
         //------------------------------------------------------------------------------
 
-        private void AddJoin(OutPt Op1, OutPt Op2, IntPoint OffPt)
+        private void AddJoin(OutPt Op1, OutPt Op2, Point OffPt)
         {
-            Join j = new Join
+            var j = new Join
             {
                 OutPt1 = Op1,
                 OutPt2 = Op2,
@@ -1317,26 +930,28 @@ namespace Route3D.Helpers
             };
             m_Joins.Add(j);
         }
+
         //------------------------------------------------------------------------------
 
-        private void AddGhostJoin(OutPt Op, IntPoint OffPt)
+        private void AddGhostJoin(OutPt Op, Point OffPt)
         {
-            Join j = new Join
+            var j = new Join
             {
                 OutPt1 = Op,
                 OffPt = OffPt
             };
             m_GhostJoins.Add(j);
         }
+
         //------------------------------------------------------------------------------
 
 
-        private void InsertLocalMinimaIntoAEL(long botY)
+        private void InsertLocalMinimaIntoAEL(double botY)
         {
-            while (m_CurrentLM != null && (m_CurrentLM.Y == botY))
+            while (m_CurrentLM != null && (Math.Abs(m_CurrentLM.Y - botY) < double.Epsilon))
             {
-                TEdge lb = m_CurrentLM.LeftBound;
-                TEdge rb = m_CurrentLM.RightBound;
+                var lb = m_CurrentLM.LeftBound;
+                var rb = m_CurrentLM.RightBound;
                 PopLocalMinima();
 
                 OutPt Op1 = null;
@@ -1379,9 +994,9 @@ namespace Route3D.Helpers
 
                 //if output polygons share an Edge with a horizontal rb, they'll need joining later ...
                 if (Op1 != null && IsHorizontal(rb) &&
-                  m_GhostJoins.Count > 0 && rb.WindDelta != 0)
+                    m_GhostJoins.Count > 0 && rb.WindDelta != 0)
                 {
-                    foreach (Join j in m_GhostJoins)
+                    foreach (var j in m_GhostJoins)
                     {
                         if (HorzSegmentsOverlap(j.OutPt1.Pt.X, j.OffPt.X, rb.Bot.X, rb.Top.X))
                             AddJoin(j.OutPt1, Op1, j.OffPt);
@@ -1389,27 +1004,26 @@ namespace Route3D.Helpers
                 }
 
                 if (lb.OutIdx >= 0 && lb.PrevInAEL != null &&
-                  lb.PrevInAEL.Curr.X == lb.Bot.X &&
-                  lb.PrevInAEL.OutIdx >= 0 &&
-                  SlopesEqual(lb.PrevInAEL, lb, m_UseFullRange) &&
-                  lb.WindDelta != 0 && lb.PrevInAEL.WindDelta != 0)
+                    Math.Abs(lb.PrevInAEL.Curr.X - lb.Bot.X) < double.Epsilon &&
+                    lb.PrevInAEL.OutIdx >= 0 &&
+                    SlopesEqual(lb.PrevInAEL, lb) &&
+                    lb.WindDelta != 0 && lb.PrevInAEL.WindDelta != 0)
                 {
-                    OutPt Op2 = AddOutPt(lb.PrevInAEL, lb.Bot);
+                    var Op2 = AddOutPt(lb.PrevInAEL, lb.Bot);
                     AddJoin(Op1, Op2, lb.Top);
                 }
 
                 if (lb.NextInAEL != rb)
                 {
-
                     if (rb.OutIdx >= 0 && rb.PrevInAEL.OutIdx >= 0 &&
-                      SlopesEqual(rb.PrevInAEL, rb, m_UseFullRange) &&
-                      rb.WindDelta != 0 && rb.PrevInAEL.WindDelta != 0)
+                        SlopesEqual(rb.PrevInAEL, rb) &&
+                        rb.WindDelta != 0 && rb.PrevInAEL.WindDelta != 0)
                     {
-                        OutPt Op2 = AddOutPt(rb.PrevInAEL, rb.Bot);
+                        var Op2 = AddOutPt(rb.PrevInAEL, rb.Bot);
                         AddJoin(Op1, Op2, rb.Top);
                     }
 
-                    TEdge e = lb.NextInAEL;
+                    var e = lb.NextInAEL;
                     if (e != null)
                         while (e != rb)
                         {
@@ -1421,6 +1035,7 @@ namespace Route3D.Helpers
                 }
             }
         }
+
         //------------------------------------------------------------------------------
 
         private void InsertEdgeIntoAEL(TEdge edge, TEdge startEdge)
@@ -1442,7 +1057,7 @@ namespace Route3D.Helpers
             {
                 if (startEdge == null) startEdge = m_ActiveEdges;
                 while (startEdge.NextInAEL != null &&
-                  !E2InsertsBeforeE1(startEdge.NextInAEL, edge))
+                       !E2InsertsBeforeE1(startEdge.NextInAEL, edge))
                     startEdge = startEdge.NextInAEL;
                 edge.NextInAEL = startEdge.NextInAEL;
                 if (startEdge.NextInAEL != null) startEdge.NextInAEL.PrevInAEL = edge;
@@ -1450,11 +1065,12 @@ namespace Route3D.Helpers
                 startEdge.NextInAEL = edge;
             }
         }
+
         //----------------------------------------------------------------------
 
         private bool E2InsertsBeforeE1(TEdge e1, TEdge e2)
         {
-            if (e2.Curr.X == e1.Curr.X)
+            if (Math.Abs(e2.Curr.X - e1.Curr.X) < double.Epsilon)
             {
                 if (e2.Top.Y > e1.Top.Y)
                     return e2.Top.X < TopX(e1, e2.Top.Y);
@@ -1462,6 +1078,7 @@ namespace Route3D.Helpers
             }
             else return e2.Curr.X < e1.Curr.X;
         }
+
         //------------------------------------------------------------------------------
 
         private bool IsEvenOddFillType(TEdge edge)
@@ -1471,6 +1088,7 @@ namespace Route3D.Helpers
             else
                 return m_ClipFillType == PolyFillType.EvenOdd;
         }
+
         //------------------------------------------------------------------------------
 
         private bool IsEvenOddAltFillType(TEdge edge)
@@ -1480,6 +1098,7 @@ namespace Route3D.Helpers
             else
                 return m_SubjFillType == PolyFillType.EvenOdd;
         }
+
         //------------------------------------------------------------------------------
 
         private bool IsContributing(TEdge edge)
@@ -1577,11 +1196,12 @@ namespace Route3D.Helpers
             }
             return true;
         }
+
         //------------------------------------------------------------------------------
 
         private void SetWindingCount(TEdge edge)
         {
-            TEdge e = edge.PrevInAEL;
+            var e = edge.PrevInAEL;
             //find the edge of the same polytype that immediately preceeds 'edge' in AEL
             while (e != null && ((e.PolyTyp != edge.PolyTyp) || (e.WindDelta == 0))) e = e.PrevInAEL;
             if (e == null)
@@ -1602,8 +1222,8 @@ namespace Route3D.Helpers
                 if (edge.WindDelta == 0)
                 {
                     //are we inside a subj polygon ...
-                    bool Inside = true;
-                    TEdge e2 = e.PrevInAEL;
+                    var Inside = true;
+                    var e2 = e.PrevInAEL;
                     while (e2 != null)
                     {
                         if (e2.PolyTyp == e.PolyTyp && e2.WindDelta != 0)
@@ -1622,7 +1242,7 @@ namespace Route3D.Helpers
             else
             {
                 //nonZero, Positive or Negative filling ...
-                if (e.WindCnt * e.WindDelta < 0)
+                if (e.WindCnt*e.WindDelta < 0)
                 {
                     //prev edge is 'decreasing' WindCount (WC) toward zero
                     //so we're outside the previous polygon ...
@@ -1630,12 +1250,12 @@ namespace Route3D.Helpers
                     {
                         //outside prev poly but still inside another.
                         //when reversing direction of prev poly use the same WC 
-                        if (e.WindDelta * edge.WindDelta < 0) edge.WindCnt = e.WindCnt;
+                        if (e.WindDelta*edge.WindDelta < 0) edge.WindCnt = e.WindCnt;
                         //otherwise continue to 'decrease' WC ...
                         else edge.WindCnt = e.WindCnt + edge.WindDelta;
                     }
                     else
-                        //now outside all polys of same polytype so set own WC ...
+                    //now outside all polys of same polytype so set own WC ...
                         edge.WindCnt = (edge.WindDelta == 0 ? 1 : edge.WindDelta);
                 }
                 else
@@ -1645,7 +1265,7 @@ namespace Route3D.Helpers
                     if (edge.WindDelta == 0)
                         edge.WindCnt = (e.WindCnt < 0 ? e.WindCnt - 1 : e.WindCnt + 1);
                     //if wind direction is reversing prev then use same WC
-                    else if (e.WindDelta * edge.WindDelta < 0)
+                    else if (e.WindDelta*edge.WindDelta < 0)
                         edge.WindCnt = e.WindCnt;
                     //otherwise add to WC ...
                     else edge.WindCnt = e.WindCnt + edge.WindDelta;
@@ -1675,6 +1295,7 @@ namespace Route3D.Helpers
                 }
             }
         }
+
         //------------------------------------------------------------------------------
 
         private void AddEdgeToSEL(TEdge edge)
@@ -1695,11 +1316,12 @@ namespace Route3D.Helpers
                 m_SortedEdges = edge;
             }
         }
+
         //------------------------------------------------------------------------------
 
         private void CopyAELToSEL()
         {
-            TEdge e = m_ActiveEdges;
+            var e = m_ActiveEdges;
             m_SortedEdges = e;
             while (e != null)
             {
@@ -1708,20 +1330,21 @@ namespace Route3D.Helpers
                 e = e.NextInAEL;
             }
         }
+
         //------------------------------------------------------------------------------
 
         private void SwapPositionsInAEL(TEdge edge1, TEdge edge2)
         {
             //check that one or other edge hasn't already been removed from AEL ...
             if (edge1.NextInAEL == edge1.PrevInAEL ||
-              edge2.NextInAEL == edge2.PrevInAEL) return;
+                edge2.NextInAEL == edge2.PrevInAEL) return;
 
             if (edge1.NextInAEL == edge2)
             {
-                TEdge next = edge2.NextInAEL;
+                var next = edge2.NextInAEL;
                 if (next != null)
                     next.PrevInAEL = edge1;
-                TEdge prev = edge1.PrevInAEL;
+                var prev = edge1.PrevInAEL;
                 if (prev != null)
                     prev.NextInAEL = edge2;
                 edge2.PrevInAEL = prev;
@@ -1731,10 +1354,10 @@ namespace Route3D.Helpers
             }
             else if (edge2.NextInAEL == edge1)
             {
-                TEdge next = edge1.NextInAEL;
+                var next = edge1.NextInAEL;
                 if (next != null)
                     next.PrevInAEL = edge2;
-                TEdge prev = edge2.PrevInAEL;
+                var prev = edge2.PrevInAEL;
                 if (prev != null)
                     prev.NextInAEL = edge1;
                 edge1.PrevInAEL = prev;
@@ -1744,8 +1367,8 @@ namespace Route3D.Helpers
             }
             else
             {
-                TEdge next = edge1.NextInAEL;
-                TEdge prev = edge1.PrevInAEL;
+                var next = edge1.NextInAEL;
+                var prev = edge1.PrevInAEL;
                 edge1.NextInAEL = edge2.NextInAEL;
                 if (edge1.NextInAEL != null)
                     edge1.NextInAEL.PrevInAEL = edge1;
@@ -1765,6 +1388,7 @@ namespace Route3D.Helpers
             else if (edge2.PrevInAEL == null)
                 m_ActiveEdges = edge2;
         }
+
         //------------------------------------------------------------------------------
 
         private void SwapPositionsInSEL(TEdge edge1, TEdge edge2)
@@ -1776,10 +1400,10 @@ namespace Route3D.Helpers
 
             if (edge1.NextInSEL == edge2)
             {
-                TEdge next = edge2.NextInSEL;
+                var next = edge2.NextInSEL;
                 if (next != null)
                     next.PrevInSEL = edge1;
-                TEdge prev = edge1.PrevInSEL;
+                var prev = edge1.PrevInSEL;
                 if (prev != null)
                     prev.NextInSEL = edge2;
                 edge2.PrevInSEL = prev;
@@ -1789,10 +1413,10 @@ namespace Route3D.Helpers
             }
             else if (edge2.NextInSEL == edge1)
             {
-                TEdge next = edge1.NextInSEL;
+                var next = edge1.NextInSEL;
                 if (next != null)
                     next.PrevInSEL = edge2;
-                TEdge prev = edge2.PrevInSEL;
+                var prev = edge2.PrevInSEL;
                 if (prev != null)
                     prev.NextInSEL = edge1;
                 edge1.PrevInSEL = prev;
@@ -1802,8 +1426,8 @@ namespace Route3D.Helpers
             }
             else
             {
-                TEdge next = edge1.NextInSEL;
-                TEdge prev = edge1.PrevInSEL;
+                var next = edge1.NextInSEL;
+                var prev = edge1.PrevInSEL;
                 edge1.NextInSEL = edge2.NextInSEL;
                 if (edge1.NextInSEL != null)
                     edge1.NextInSEL.PrevInSEL = edge1;
@@ -1823,10 +1447,11 @@ namespace Route3D.Helpers
             else if (edge2.PrevInSEL == null)
                 m_SortedEdges = edge2;
         }
+
         //------------------------------------------------------------------------------
 
 
-        private void AddLocalMaxPoly(TEdge e1, TEdge e2, IntPoint pt)
+        private void AddLocalMaxPoly(TEdge e1, TEdge e2, Point pt)
         {
             AddOutPt(e1, pt);
             if (e2.WindDelta == 0) AddOutPt(e2, pt);
@@ -1840,9 +1465,10 @@ namespace Route3D.Helpers
             else
                 AppendPolygon(e2, e1);
         }
+
         //------------------------------------------------------------------------------
 
-        private OutPt AddLocalMinPoly(TEdge e1, TEdge e2, IntPoint pt)
+        private OutPt AddLocalMinPoly(TEdge e1, TEdge e2, Point pt)
         {
             OutPt result;
             TEdge e, prevE;
@@ -1853,10 +1479,7 @@ namespace Route3D.Helpers
                 e1.Side = EdgeSide.Left;
                 e2.Side = EdgeSide.Right;
                 e = e1;
-                if (e.PrevInAEL == e2)
-                    prevE = e2.PrevInAEL;
-                else
-                    prevE = e.PrevInAEL;
+                prevE = e.PrevInAEL == e2 ? e2.PrevInAEL : e.PrevInAEL;
             }
             else
             {
@@ -1865,48 +1488,49 @@ namespace Route3D.Helpers
                 e1.Side = EdgeSide.Right;
                 e2.Side = EdgeSide.Left;
                 e = e2;
-                if (e.PrevInAEL == e1)
-                    prevE = e1.PrevInAEL;
-                else
-                    prevE = e.PrevInAEL;
+                prevE = e.PrevInAEL == e1 ? e1.PrevInAEL : e.PrevInAEL;
             }
 
             if (prevE != null && prevE.OutIdx >= 0 &&
-                (TopX(prevE, pt.Y) == TopX(e, pt.Y)) &&
-                SlopesEqual(e, prevE, m_UseFullRange) &&
+                (Math.Abs(TopX(prevE, pt.Y) - TopX(e, pt.Y)) < double.Epsilon) &&
+                SlopesEqual(e, prevE) &&
                 (e.WindDelta != 0) && (prevE.WindDelta != 0))
             {
-                OutPt outPt = AddOutPt(prevE, pt);
+                var outPt = AddOutPt(prevE, pt);
                 AddJoin(result, outPt, e.Top);
             }
             return result;
         }
+
         //------------------------------------------------------------------------------
 
         private OutRec CreateOutRec()
         {
-            OutRec result = new OutRec();
-            result.Idx = Unassigned;
-            result.IsHole = false;
-            result.IsOpen = false;
-            result.FirstLeft = null;
-            result.Pts = null;
-            result.BottomPt = null;
-            result.PolyNode = null;
+            var result = new OutRec
+            {
+                Idx = Unassigned,
+                IsHole = false,
+                IsOpen = false,
+                FirstLeft = null,
+                Pts = null,
+                BottomPt = null
+            };
+
             m_PolyOuts.Add(result);
             result.Idx = m_PolyOuts.Count - 1;
             return result;
         }
+
         //------------------------------------------------------------------------------
 
-        private OutPt AddOutPt(TEdge e, IntPoint pt)
+        private OutPt AddOutPt(TEdge e, Point pt)
         {
-            bool ToFront = (e.Side == EdgeSide.Left);
+            var ToFront = (e.Side == EdgeSide.Left);
             if (e.OutIdx < 0)
             {
-                OutRec outRec = CreateOutRec();
+                var outRec = CreateOutRec();
                 outRec.IsOpen = (e.WindDelta == 0);
-                OutPt newOp = new OutPt();
+                var newOp = new OutPt();
                 outRec.Pts = newOp;
                 newOp.Idx = outRec.Idx;
                 newOp.Pt = pt;
@@ -1919,45 +1543,51 @@ namespace Route3D.Helpers
             }
             else
             {
-                OutRec outRec = m_PolyOuts[e.OutIdx];
+                var outRec = m_PolyOuts[e.OutIdx];
                 //OutRec.Pts is the 'Left-most' point & OutRec.Pts.Prev is the 'Right-most'
-                OutPt op = outRec.Pts;
+                var op = outRec.Pts;
                 if (ToFront && pt == op.Pt) return op;
                 else if (!ToFront && pt == op.Prev.Pt) return op.Prev;
 
-                OutPt newOp = new OutPt();
-                newOp.Idx = outRec.Idx;
-                newOp.Pt = pt;
-                newOp.Next = op;
-                newOp.Prev = op.Prev;
+                var newOp = new OutPt
+                {
+                    Idx = outRec.Idx,
+                    Pt = pt,
+                    Next = op,
+                    Prev = op.Prev
+                };
                 newOp.Prev.Next = newOp;
                 op.Prev = newOp;
                 if (ToFront) outRec.Pts = newOp;
                 return newOp;
             }
         }
+
         //------------------------------------------------------------------------------
 
-        internal void SwapPoints(ref IntPoint pt1, ref IntPoint pt2)
+        protected  void SwapPoints(ref Point pt1, ref Point pt2)
         {
-            IntPoint tmp = new IntPoint(pt1);
+            var tmp = new Point(pt1.X, pt1.Y);
             pt1 = pt2;
             pt2 = tmp;
         }
+
         //------------------------------------------------------------------------------
 
-        private bool HorzSegmentsOverlap(long seg1a, long seg1b, long seg2a, long seg2b)
+        private bool HorzSegmentsOverlap(double seg1a, double seg1b, double seg2a, double seg2b)
         {
-            if (seg1a > seg1b) Swap(ref seg1a, ref seg1b);
-            if (seg2a > seg2b) Swap(ref seg2a, ref seg2b);
+            if (seg1a > seg1b) GeneralHelpers.Swap(ref seg1a, ref seg1b);
+            if (seg2a > seg2b) GeneralHelpers.Swap(ref seg2a, ref seg2b);
+
             return (seg1a < seg2b) && (seg2a < seg1b);
         }
+
         //------------------------------------------------------------------------------
 
         private void SetHoleState(TEdge e, OutRec outRec)
         {
-            bool isHole = false;
-            TEdge e2 = e.PrevInAEL;
+            var isHole = false;
+            var e2 = e.PrevInAEL;
             while (e2 != null)
             {
                 if (e2.OutIdx >= 0 && e2.WindDelta != 0)
@@ -1971,38 +1601,41 @@ namespace Route3D.Helpers
             if (isHole)
                 outRec.IsHole = true;
         }
+
         //------------------------------------------------------------------------------
 
-        private double GetDx(IntPoint pt1, IntPoint pt2)
+        private double GetDx(Point pt1, Point pt2)
         {
-            if (pt1.Y == pt2.Y) return horizontal;
-            else return (double)(pt2.X - pt1.X) / (pt2.Y - pt1.Y);
+            if (Math.Abs(pt1.Y - pt2.Y) < double.Epsilon) return horizontal;
+            else return (pt2.X - pt1.X)/(pt2.Y - pt1.Y);
         }
+
         //---------------------------------------------------------------------------
 
         private bool FirstIsBottomPt(OutPt btmPt1, OutPt btmPt2)
         {
-            OutPt p = btmPt1.Prev;
+            var p = btmPt1.Prev;
             while ((p.Pt == btmPt1.Pt) && (p != btmPt1)) p = p.Prev;
-            double dx1p = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
+            var dx1p = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
             p = btmPt1.Next;
             while ((p.Pt == btmPt1.Pt) && (p != btmPt1)) p = p.Next;
-            double dx1n = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
+            var dx1n = Math.Abs(GetDx(btmPt1.Pt, p.Pt));
 
             p = btmPt2.Prev;
             while ((p.Pt == btmPt2.Pt) && (p != btmPt2)) p = p.Prev;
-            double dx2p = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
+            var dx2p = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
             p = btmPt2.Next;
             while ((p.Pt == btmPt2.Pt) && (p != btmPt2)) p = p.Next;
-            double dx2n = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
+            var dx2n = Math.Abs(GetDx(btmPt2.Pt, p.Pt));
             return (dx1p >= dx2p && dx1p >= dx2n) || (dx1n >= dx2p && dx1n >= dx2n);
         }
+
         //------------------------------------------------------------------------------
 
         private OutPt GetBottomPt(OutPt pp)
         {
             OutPt dups = null;
-            OutPt p = pp.Next;
+            var p = pp.Next;
             while (p != pp)
             {
                 if (p.Pt.Y > pp.Pt.Y)
@@ -2010,7 +1643,7 @@ namespace Route3D.Helpers
                     pp = p;
                     dups = null;
                 }
-                else if (p.Pt.Y == pp.Pt.Y && p.Pt.X <= pp.Pt.X)
+                else if (Math.Abs(p.Pt.Y - pp.Pt.Y) < double.Epsilon && p.Pt.X <= pp.Pt.X)
                 {
                     if (p.Pt.X < pp.Pt.X)
                     {
@@ -2036,6 +1669,7 @@ namespace Route3D.Helpers
             }
             return pp;
         }
+
         //------------------------------------------------------------------------------
 
         private OutRec GetLowermostRec(OutRec outRec1, OutRec outRec2)
@@ -2045,8 +1679,8 @@ namespace Route3D.Helpers
                 outRec1.BottomPt = GetBottomPt(outRec1.Pts);
             if (outRec2.BottomPt == null)
                 outRec2.BottomPt = GetBottomPt(outRec2.Pts);
-            OutPt bPt1 = outRec1.BottomPt;
-            OutPt bPt2 = outRec2.BottomPt;
+            var bPt1 = outRec1.BottomPt;
+            var bPt2 = outRec2.BottomPt;
             if (bPt1.Pt.Y > bPt2.Pt.Y) return outRec1;
             else if (bPt1.Pt.Y < bPt2.Pt.Y) return outRec2;
             else if (bPt1.Pt.X < bPt2.Pt.X) return outRec1;
@@ -2056,9 +1690,10 @@ namespace Route3D.Helpers
             else if (FirstIsBottomPt(bPt1, bPt2)) return outRec1;
             else return outRec2;
         }
+
         //------------------------------------------------------------------------------
 
-        bool Param1RightOfParam2(OutRec outRec1, OutRec outRec2)
+        private bool Param1RightOfParam2(OutRec outRec1, OutRec outRec2)
         {
             do
             {
@@ -2067,22 +1702,24 @@ namespace Route3D.Helpers
             } while (outRec1 != null);
             return false;
         }
+
         //------------------------------------------------------------------------------
 
         private OutRec GetOutRec(int idx)
         {
-            OutRec outrec = m_PolyOuts[idx];
+            var outrec = m_PolyOuts[idx];
             while (outrec != m_PolyOuts[outrec.Idx])
                 outrec = m_PolyOuts[outrec.Idx];
             return outrec;
         }
+
         //------------------------------------------------------------------------------
 
         private void AppendPolygon(TEdge e1, TEdge e2)
         {
             //get the start and ends of both output polygons ...
-            OutRec outRec1 = m_PolyOuts[e1.OutIdx];
-            OutRec outRec2 = m_PolyOuts[e2.OutIdx];
+            var outRec1 = m_PolyOuts[e1.OutIdx];
+            var outRec2 = m_PolyOuts[e2.OutIdx];
 
             OutRec holeStateRec;
             if (Param1RightOfParam2(outRec1, outRec2))
@@ -2092,10 +1729,10 @@ namespace Route3D.Helpers
             else
                 holeStateRec = GetLowermostRec(outRec1, outRec2);
 
-            OutPt p1_lft = outRec1.Pts;
-            OutPt p1_rt = p1_lft.Prev;
-            OutPt p2_lft = outRec2.Pts;
-            OutPt p2_rt = p2_lft.Prev;
+            var p1_lft = outRec1.Pts;
+            var p1_rt = p1_lft.Prev;
+            var p2_lft = outRec2.Pts;
+            var p2_rt = p2_lft.Prev;
 
             EdgeSide side;
             //join e2 poly onto e1 poly and delete pointers to e2 ...
@@ -2156,13 +1793,13 @@ namespace Route3D.Helpers
 
             outRec2.FirstLeft = outRec1;
 
-            int OKIdx = e1.OutIdx;
-            int ObsoleteIdx = e2.OutIdx;
+            var OKIdx = e1.OutIdx;
+            var ObsoleteIdx = e2.OutIdx;
 
             e1.OutIdx = Unassigned; //nb: safe because we only get here via AddLocalMaxPoly
             e2.OutIdx = Unassigned;
 
-            TEdge e = m_ActiveEdges;
+            var e = m_ActiveEdges;
             while (e != null)
             {
                 if (e.OutIdx == ObsoleteIdx)
@@ -2175,47 +1812,49 @@ namespace Route3D.Helpers
             }
             outRec2.Idx = outRec1.Idx;
         }
+
         //------------------------------------------------------------------------------
 
         private void ReversePolyPtLinks(OutPt pp)
         {
             if (pp == null) return;
-            OutPt pp1;
-            OutPt pp2;
-            pp1 = pp;
+            var pp1 = pp;
             do
             {
-                pp2 = pp1.Next;
+                var pp2 = pp1.Next;
                 pp1.Next = pp1.Prev;
                 pp1.Prev = pp2;
                 pp1 = pp2;
             } while (pp1 != pp);
         }
+
         //------------------------------------------------------------------------------
 
         private static void SwapSides(TEdge edge1, TEdge edge2)
         {
-            EdgeSide side = edge1.Side;
+            var side = edge1.Side;
             edge1.Side = edge2.Side;
             edge2.Side = side;
         }
+
         //------------------------------------------------------------------------------
 
         private static void SwapPolyIndexes(TEdge edge1, TEdge edge2)
         {
-            int outIdx = edge1.OutIdx;
+            var outIdx = edge1.OutIdx;
             edge1.OutIdx = edge2.OutIdx;
             edge2.OutIdx = outIdx;
         }
+
         //------------------------------------------------------------------------------
 
-        private void IntersectEdges(TEdge e1, TEdge e2, IntPoint pt)
+        private void IntersectEdges(TEdge e1, TEdge e2, Point pt)
         {
             //e1 will be to the left of e2 BELOW the intersection. Therefore e1 is before
             //e2 in AEL except when e1 is being inserted at the intersection point ...
 
-            bool e1Contributing = (e1.OutIdx >= 0);
-            bool e2Contributing = (e2.OutIdx >= 0);
+            var e1Contributing = (e1.OutIdx >= 0);
+            var e2Contributing = (e2.OutIdx >= 0);
 
             //update winding counts...
             //assumes that e1 will be to the Right of e2 ABOVE the intersection
@@ -2223,7 +1862,7 @@ namespace Route3D.Helpers
             {
                 if (IsEvenOddFillType(e1))
                 {
-                    int oldE1WindCnt = e1.WindCnt;
+                    var oldE1WindCnt = e1.WindCnt;
                     e1.WindCnt = e2.WindCnt;
                     e2.WindCnt = oldE1WindCnt;
                 }
@@ -2268,21 +1907,33 @@ namespace Route3D.Helpers
             int e1Wc, e2Wc;
             switch (e1FillType)
             {
-                case PolyFillType.Positive: e1Wc = e1.WindCnt; break;
-                case PolyFillType.Negative: e1Wc = -e1.WindCnt; break;
-                default: e1Wc = Math.Abs(e1.WindCnt); break;
+                case PolyFillType.Positive:
+                    e1Wc = e1.WindCnt;
+                    break;
+                case PolyFillType.Negative:
+                    e1Wc = -e1.WindCnt;
+                    break;
+                default:
+                    e1Wc = Math.Abs(e1.WindCnt);
+                    break;
             }
             switch (e2FillType)
             {
-                case PolyFillType.Positive: e2Wc = e2.WindCnt; break;
-                case PolyFillType.Negative: e2Wc = -e2.WindCnt; break;
-                default: e2Wc = Math.Abs(e2.WindCnt); break;
+                case PolyFillType.Positive:
+                    e2Wc = e2.WindCnt;
+                    break;
+                case PolyFillType.Negative:
+                    e2Wc = -e2.WindCnt;
+                    break;
+                default:
+                    e2Wc = Math.Abs(e2.WindCnt);
+                    break;
             }
 
             if (e1Contributing && e2Contributing)
             {
                 if ((e1Wc != 0 && e1Wc != 1) || (e2Wc != 0 && e2Wc != 1) ||
-                  (e1.PolyTyp != e2.PolyTyp && m_ClipType != ClipType.Xor))
+                    (e1.PolyTyp != e2.PolyTyp && m_ClipType != ClipType.Xor))
                 {
                     AddLocalMaxPoly(e1, e2, pt);
                 }
@@ -2302,7 +1953,6 @@ namespace Route3D.Helpers
                     SwapSides(e1, e2);
                     SwapPolyIndexes(e1, e2);
                 }
-
             }
             else if (e2Contributing)
             {
@@ -2319,15 +1969,27 @@ namespace Route3D.Helpers
                 long e1Wc2, e2Wc2;
                 switch (e1FillType2)
                 {
-                    case PolyFillType.Positive: e1Wc2 = e1.WindCnt2; break;
-                    case PolyFillType.Negative: e1Wc2 = -e1.WindCnt2; break;
-                    default: e1Wc2 = Math.Abs(e1.WindCnt2); break;
+                    case PolyFillType.Positive:
+                        e1Wc2 = e1.WindCnt2;
+                        break;
+                    case PolyFillType.Negative:
+                        e1Wc2 = -e1.WindCnt2;
+                        break;
+                    default:
+                        e1Wc2 = Math.Abs(e1.WindCnt2);
+                        break;
                 }
                 switch (e2FillType2)
                 {
-                    case PolyFillType.Positive: e2Wc2 = e2.WindCnt2; break;
-                    case PolyFillType.Negative: e2Wc2 = -e2.WindCnt2; break;
-                    default: e2Wc2 = Math.Abs(e2.WindCnt2); break;
+                    case PolyFillType.Positive:
+                        e2Wc2 = e2.WindCnt2;
+                        break;
+                    case PolyFillType.Negative:
+                        e2Wc2 = -e2.WindCnt2;
+                        break;
+                    default:
+                        e2Wc2 = Math.Abs(e2.WindCnt2);
+                        break;
                 }
 
                 if (e1.PolyTyp != e2.PolyTyp)
@@ -2358,12 +2020,13 @@ namespace Route3D.Helpers
                     SwapSides(e1, e2);
             }
         }
+
         //------------------------------------------------------------------------------
 
         private void DeleteFromAEL(TEdge e)
         {
-            TEdge AelPrev = e.PrevInAEL;
-            TEdge AelNext = e.NextInAEL;
+            var AelPrev = e.PrevInAEL;
+            var AelNext = e.NextInAEL;
             if (AelPrev == null && AelNext == null && (e != m_ActiveEdges))
                 return; //already deleted
             if (AelPrev != null)
@@ -2374,12 +2037,13 @@ namespace Route3D.Helpers
             e.NextInAEL = null;
             e.PrevInAEL = null;
         }
+
         //------------------------------------------------------------------------------
 
         private void DeleteFromSEL(TEdge e)
         {
-            TEdge SelPrev = e.PrevInSEL;
-            TEdge SelNext = e.NextInSEL;
+            var SelPrev = e.PrevInSEL;
+            var SelNext = e.NextInSEL;
             if (SelPrev == null && SelNext == null && (e != m_SortedEdges))
                 return; //already deleted
             if (SelPrev != null)
@@ -2390,14 +2054,15 @@ namespace Route3D.Helpers
             e.NextInSEL = null;
             e.PrevInSEL = null;
         }
+
         //------------------------------------------------------------------------------
 
         private void UpdateEdgeIntoAEL(ref TEdge e)
         {
             if (e.NextInLML == null)
                 throw new Exception("UpdateEdgeIntoAEL: invalid call");
-            TEdge AelPrev = e.PrevInAEL;
-            TEdge AelNext = e.NextInAEL;
+            var AelPrev = e.PrevInAEL;
+            var AelNext = e.NextInAEL;
             e.NextInLML.OutIdx = e.OutIdx;
             if (AelPrev != null)
                 AelPrev.NextInAEL = e.NextInLML;
@@ -2414,11 +2079,12 @@ namespace Route3D.Helpers
             e.NextInAEL = AelNext;
             if (!IsHorizontal(e)) InsertScanbeam(e.Top.Y);
         }
+
         //------------------------------------------------------------------------------
 
         private void ProcessHorizontals(bool isTopOfScanbeam)
         {
-            TEdge horzEdge = m_SortedEdges;
+            var horzEdge = m_SortedEdges;
             while (horzEdge != null)
             {
                 DeleteFromSEL(horzEdge);
@@ -2426,29 +2092,31 @@ namespace Route3D.Helpers
                 horzEdge = m_SortedEdges;
             }
         }
+
         //------------------------------------------------------------------------------
 
-        void GetHorzDirection(TEdge HorzEdge, out Direction Dir, out long Left, out long Right)
+        private void GetHorzDirection(TEdge horzEdge, out Direction dir, out double left, out double right)
         {
-            if (HorzEdge.Bot.X < HorzEdge.Top.X)
+            if (horzEdge.Bot.X < horzEdge.Top.X)
             {
-                Left = HorzEdge.Bot.X;
-                Right = HorzEdge.Top.X;
-                Dir = Direction.LeftToRight;
+                left = horzEdge.Bot.X;
+                right = horzEdge.Top.X;
+                dir = Direction.LeftToRight;
             }
             else
             {
-                Left = HorzEdge.Top.X;
-                Right = HorzEdge.Bot.X;
-                Dir = Direction.RightToLeft;
+                left = horzEdge.Top.X;
+                right = horzEdge.Bot.X;
+                dir = Direction.RightToLeft;
             }
         }
+
         //------------------------------------------------------------------------
 
         private void ProcessHorizontal(TEdge horzEdge, bool isTopOfScanbeam)
         {
             Direction dir;
-            long horzLeft, horzRight;
+            double horzLeft, horzRight;
 
             GetHorzDirection(horzEdge, out dir, out horzLeft, out horzRight);
 
@@ -2458,21 +2126,21 @@ namespace Route3D.Helpers
             if (eLastHorz.NextInLML == null)
                 eMaxPair = GetMaximaPair(eLastHorz);
 
-            for (; ; )
+            for (;;)
             {
-                bool IsLastHorz = (horzEdge == eLastHorz);
-                TEdge e = GetNextInAEL(horzEdge, dir);
+                var IsLastHorz = (horzEdge == eLastHorz);
+                var e = GetNextInAEL(horzEdge, dir);
                 while (e != null)
                 {
                     //Break if we've got to the end of an intermediate horizontal edge ...
                     //nb: Smaller Dx's are to the right of larger Dx's ABOVE the horizontal.
-                    if (e.Curr.X == horzEdge.Top.X && horzEdge.NextInLML != null &&
-                      e.Dx < horzEdge.NextInLML.Dx) break;
+                    if (Math.Abs(e.Curr.X - horzEdge.Top.X) < double.Epsilon && horzEdge.NextInLML != null &&
+                        e.Dx < horzEdge.NextInLML.Dx) break;
 
-                    TEdge eNext = GetNextInAEL(e, dir); //saves eNext for later
+                    var eNext = GetNextInAEL(e, dir); //saves eNext for later
 
                     if ((dir == Direction.LeftToRight && e.Curr.X <= horzRight) ||
-                      (dir == Direction.RightToLeft && e.Curr.X >= horzLeft))
+                        (dir == Direction.RightToLeft && e.Curr.X >= horzLeft))
                     {
                         //so far we're still in range of the horizontal Edge  but make sure
                         //we're at the last of consec. horizontals when matching with eMaxPair
@@ -2480,15 +2148,15 @@ namespace Route3D.Helpers
                         {
                             if (horzEdge.OutIdx >= 0)
                             {
-                                OutPt op1 = AddOutPt(horzEdge, horzEdge.Top);
-                                TEdge eNextHorz = m_SortedEdges;
+                                var op1 = AddOutPt(horzEdge, horzEdge.Top);
+                                var eNextHorz = m_SortedEdges;
                                 while (eNextHorz != null)
                                 {
                                     if (eNextHorz.OutIdx >= 0 &&
-                                      HorzSegmentsOverlap(horzEdge.Bot.X,
-                                      horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
+                                        HorzSegmentsOverlap(horzEdge.Bot.X,
+                                            horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
                                     {
-                                        OutPt op2 = AddOutPt(eNextHorz, eNextHorz.Bot);
+                                        var op2 = AddOutPt(eNextHorz, eNextHorz.Bot);
                                         AddJoin(op2, op1, eNextHorz.Top);
                                     }
                                     eNextHorz = eNextHorz.NextInSEL;
@@ -2502,18 +2170,18 @@ namespace Route3D.Helpers
                         }
                         else if (dir == Direction.LeftToRight)
                         {
-                            IntPoint Pt = new IntPoint(e.Curr.X, horzEdge.Curr.Y);
+                            var Pt = new Point(e.Curr.X, horzEdge.Curr.Y);
                             IntersectEdges(horzEdge, e, Pt);
                         }
                         else
                         {
-                            IntPoint Pt = new IntPoint(e.Curr.X, horzEdge.Curr.Y);
+                            var Pt = new Point(e.Curr.X, horzEdge.Curr.Y);
                             IntersectEdges(e, horzEdge, Pt);
                         }
                         SwapPositionsInAEL(horzEdge, e);
                     }
                     else if ((dir == Direction.LeftToRight && e.Curr.X >= horzRight) ||
-                      (dir == Direction.RightToLeft && e.Curr.X <= horzLeft)) break;
+                             (dir == Direction.RightToLeft && e.Curr.X <= horzLeft)) break;
                     e = eNext;
                 } //end while
 
@@ -2531,28 +2199,26 @@ namespace Route3D.Helpers
             {
                 if (horzEdge.OutIdx >= 0)
                 {
-                    OutPt op1 = AddOutPt(horzEdge, horzEdge.Top);
+                    var op1 = AddOutPt(horzEdge, horzEdge.Top);
                     if (isTopOfScanbeam) AddGhostJoin(op1, horzEdge.Bot);
 
                     UpdateEdgeIntoAEL(ref horzEdge);
                     if (horzEdge.WindDelta == 0) return;
                     //nb: HorzEdge is no longer horizontal here
-                    TEdge ePrev = horzEdge.PrevInAEL;
-                    TEdge eNext = horzEdge.NextInAEL;
-                    if (ePrev != null && ePrev.Curr.X == horzEdge.Bot.X &&
-                      ePrev.Curr.Y == horzEdge.Bot.Y && ePrev.WindDelta != 0 &&
-                      (ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
-                      SlopesEqual(horzEdge, ePrev, m_UseFullRange)))
+                    var ePrev = horzEdge.PrevInAEL;
+                    var eNext = horzEdge.NextInAEL;
+                    if (ePrev != null && Math.Abs(ePrev.Curr.X - horzEdge.Bot.X) < double.Epsilon && Math.Abs(ePrev.Curr.Y - horzEdge.Bot.Y) < double.Epsilon && ePrev.WindDelta != 0 &&
+                        (ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
+                         SlopesEqual(horzEdge, ePrev)))
                     {
-                        OutPt op2 = AddOutPt(ePrev, horzEdge.Bot);
+                        var op2 = AddOutPt(ePrev, horzEdge.Bot);
                         AddJoin(op1, op2, horzEdge.Top);
                     }
-                    else if (eNext != null && eNext.Curr.X == horzEdge.Bot.X &&
-                      eNext.Curr.Y == horzEdge.Bot.Y && eNext.WindDelta != 0 &&
-                      eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y &&
-                      SlopesEqual(horzEdge, eNext, m_UseFullRange))
+                    else if (eNext != null && Math.Abs(eNext.Curr.X - horzEdge.Bot.X) < double.Epsilon && Math.Abs(eNext.Curr.Y - horzEdge.Bot.Y) < double.Epsilon && eNext.WindDelta != 0 &&
+                             eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y &&
+                             SlopesEqual(horzEdge, eNext))
                     {
-                        OutPt op2 = AddOutPt(eNext, horzEdge.Bot);
+                        var op2 = AddOutPt(eNext, horzEdge.Bot);
                         AddJoin(op1, op2, horzEdge.Top);
                     }
                 }
@@ -2565,30 +2231,35 @@ namespace Route3D.Helpers
                 DeleteFromAEL(horzEdge);
             }
         }
+
         //------------------------------------------------------------------------------
 
         private TEdge GetNextInAEL(TEdge e, Direction Direction)
         {
             return Direction == Direction.LeftToRight ? e.NextInAEL : e.PrevInAEL;
         }
+
         //------------------------------------------------------------------------------
 
         private bool IsMinima(TEdge e)
         {
             return e != null && (e.Prev.NextInLML != e) && (e.Next.NextInLML != e);
         }
+
         //------------------------------------------------------------------------------
 
         private bool IsMaxima(TEdge e, double Y)
         {
-            return (e != null && Math.Abs(e.Top.Y - Y) < Double.Epsilon && e.NextInLML == null);
+            return (e != null && Math.Abs(e.Top.Y - Y) < double.Epsilon && e.NextInLML == null);
         }
+
         //------------------------------------------------------------------------------
 
         private bool IsIntermediate(TEdge e, double Y)
         {
-            return (Math.Abs(e.Top.Y - Y) < Double.Epsilon && e.NextInLML != null);
+            return (Math.Abs(e.Top.Y - Y) < double.Epsilon && e.NextInLML != null);
         }
+
         //------------------------------------------------------------------------------
 
         private TEdge GetMaximaPair(TEdge e)
@@ -2599,13 +2270,14 @@ namespace Route3D.Helpers
             else if ((e.Prev.Top == e.Top) && e.Prev.NextInLML == null)
                 result = e.Prev;
             if (result != null && (result.OutIdx == Skip ||
-              (result.NextInAEL == result.PrevInAEL && !IsHorizontal(result))))
+                                   (result.NextInAEL == result.PrevInAEL && !IsHorizontal(result))))
                 return null;
             return result;
         }
+
         //------------------------------------------------------------------------------
 
-        private bool ProcessIntersections(long topY)
+        private bool ProcessIntersections(double topY)
         {
             if (m_ActiveEdges == null) return true;
             try
@@ -2626,14 +2298,15 @@ namespace Route3D.Helpers
             m_SortedEdges = null;
             return true;
         }
+
         //------------------------------------------------------------------------------
 
-        private void BuildIntersectList(long topY)
+        private void BuildIntersectList(double topY)
         {
             if (m_ActiveEdges == null) return;
 
             //prepare for sorting ...
-            TEdge e = m_ActiveEdges;
+            var e = m_ActiveEdges;
             m_SortedEdges = e;
             while (e != null)
             {
@@ -2644,22 +2317,24 @@ namespace Route3D.Helpers
             }
 
             //bubblesort ...
-            bool isModified = true;
+            var isModified = true;
             while (isModified && m_SortedEdges != null)
             {
                 isModified = false;
                 e = m_SortedEdges;
                 while (e.NextInSEL != null)
                 {
-                    TEdge eNext = e.NextInSEL;
-                    IntPoint pt;
+                    var eNext = e.NextInSEL;
                     if (e.Curr.X > eNext.Curr.X)
                     {
+                        Point pt;
                         IntersectPoint(e, eNext, out pt);
-                        IntersectNode newNode = new IntersectNode();
-                        newNode.Edge1 = e;
-                        newNode.Edge2 = eNext;
-                        newNode.Pt = pt;
+                        var newNode = new IntersectNode
+                        {
+                            Edge1 = e,
+                            Edge2 = eNext,
+                            Pt = pt
+                        };
                         m_IntersectList.Add(newNode);
 
                         SwapPositionsInSEL(e, eNext);
@@ -2673,21 +2348,24 @@ namespace Route3D.Helpers
             }
             m_SortedEdges = null;
         }
+
         //------------------------------------------------------------------------------
 
         private bool EdgesAdjacent(IntersectNode inode)
         {
             return (inode.Edge1.NextInSEL == inode.Edge2) ||
-              (inode.Edge1.PrevInSEL == inode.Edge2);
+                   (inode.Edge1.PrevInSEL == inode.Edge2);
         }
+
         //------------------------------------------------------------------------------
 
         private static int IntersectNodeSort(IntersectNode node1, IntersectNode node2)
         {
             //the following typecast is safe because the differences in Pt.Y will
             //be limited to the height of the scanbeam.
-            return (int)(node2.Pt.Y - node1.Pt.Y);
+            return (int) (node2.Pt.Y - node1.Pt.Y);
         }
+
         //------------------------------------------------------------------------------
 
         private bool FixupIntersectionOrder()
@@ -2698,31 +2376,30 @@ namespace Route3D.Helpers
             m_IntersectList.Sort(m_IntersectNodeComparer);
 
             CopyAELToSEL();
-            int cnt = m_IntersectList.Count;
-            for (int i = 0; i < cnt; i++)
+            var cnt = m_IntersectList.Count;
+            for (var i = 0; i < cnt; i++)
             {
                 if (!EdgesAdjacent(m_IntersectList[i]))
                 {
-                    int j = i + 1;
+                    var j = i + 1;
                     while (j < cnt && !EdgesAdjacent(m_IntersectList[j])) j++;
                     if (j == cnt) return false;
 
-                    IntersectNode tmp = m_IntersectList[i];
+                    var tmp = m_IntersectList[i];
                     m_IntersectList[i] = m_IntersectList[j];
                     m_IntersectList[j] = tmp;
-
                 }
                 SwapPositionsInSEL(m_IntersectList[i].Edge1, m_IntersectList[i].Edge2);
             }
             return true;
         }
+
         //------------------------------------------------------------------------------
 
         private void ProcessIntersectList()
         {
-            for (int i = 0; i < m_IntersectList.Count; i++)
+            foreach (var iNode in m_IntersectList)
             {
-                IntersectNode iNode = m_IntersectList[i];
                 {
                     IntersectEdges(iNode.Edge1, iNode.Edge2, iNode.Pt);
                     SwapPositionsInAEL(iNode.Edge1, iNode.Edge2);
@@ -2730,36 +2407,32 @@ namespace Route3D.Helpers
             }
             m_IntersectList.Clear();
         }
+
         //------------------------------------------------------------------------------
 
-        internal static long Round(double value)
+        private static double TopX(TEdge edge, double currentY)
         {
-            return value < 0 ? (long)(value - 0.5) : (long)(value + 0.5);
-        }
-        //------------------------------------------------------------------------------
-
-        private static long TopX(TEdge edge, long currentY)
-        {
-            if (currentY == edge.Top.Y)
+            if (Math.Abs(currentY - edge.Top.Y) < double.Epsilon)
                 return edge.Top.X;
-            return edge.Bot.X + Round(edge.Dx * (currentY - edge.Bot.Y));
+            return edge.Bot.X + (edge.Dx*(currentY - edge.Bot.Y));
         }
+
         //------------------------------------------------------------------------------
 
-        private void IntersectPoint(TEdge edge1, TEdge edge2, out IntPoint ip)
+        private void IntersectPoint(TEdge edge1, TEdge edge2, out Point ip)
         {
-            ip = new IntPoint();
+            ip = new Point();
             double b1, b2;
             //nb: with very large coordinate values, it's possible for SlopesEqual() to 
             //return false but for the edge.Dx value be equal due to double precision rounding.
-            if (Math.Abs(edge1.Dx - edge2.Dx) < Double.Epsilon)
+            if (Math.Abs(edge1.Dx - edge2.Dx) < double.Epsilon)
             {
                 ip.Y = edge1.Curr.Y;
                 ip.X = TopX(edge1, ip.Y);
                 return;
             }
 
-            if (edge1.Delta.X == 0)
+            if (Math.Abs(edge1.Delta.X) < double.Epsilon)
             {
                 ip.X = edge1.Bot.X;
                 if (IsHorizontal(edge2))
@@ -2768,11 +2441,11 @@ namespace Route3D.Helpers
                 }
                 else
                 {
-                    b2 = edge2.Bot.Y - (edge2.Bot.X / edge2.Dx);
-                    ip.Y = Round(ip.X / edge2.Dx + b2);
+                    b2 = edge2.Bot.Y - (edge2.Bot.X/edge2.Dx);
+                    ip.Y = (ip.X/edge2.Dx + b2);
                 }
             }
-            else if (edge2.Delta.X == 0)
+            else if (Math.Abs(edge2.Delta.X) < double.Epsilon)
             {
                 ip.X = edge2.Bot.X;
                 if (IsHorizontal(edge1))
@@ -2781,67 +2454,55 @@ namespace Route3D.Helpers
                 }
                 else
                 {
-                    b1 = edge1.Bot.Y - (edge1.Bot.X / edge1.Dx);
-                    ip.Y = Round(ip.X / edge1.Dx + b1);
+                    b1 = edge1.Bot.Y - (edge1.Bot.X/edge1.Dx);
+                    ip.Y = (ip.X/edge1.Dx + b1);
                 }
             }
             else
             {
-                b1 = edge1.Bot.X - edge1.Bot.Y * edge1.Dx;
-                b2 = edge2.Bot.X - edge2.Bot.Y * edge2.Dx;
-                double q = (b2 - b1) / (edge1.Dx - edge2.Dx);
-                ip.Y = Round(q);
-                if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx))
-                    ip.X = Round(edge1.Dx * q + b1);
-                else
-                    ip.X = Round(edge2.Dx * q + b2);
+                b1 = edge1.Bot.X - edge1.Bot.Y*edge1.Dx;
+                b2 = edge2.Bot.X - edge2.Bot.Y*edge2.Dx;
+                var q = (b2 - b1)/(edge1.Dx - edge2.Dx);
+                ip.Y = (q);
+                ip.X = Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx) ? edge1.Dx*q + b1 : edge2.Dx*q + b2;
             }
 
             if (ip.Y < edge1.Top.Y || ip.Y < edge2.Top.Y)
             {
-                if (edge1.Top.Y > edge2.Top.Y)
-                    ip.Y = edge1.Top.Y;
-                else
-                    ip.Y = edge2.Top.Y;
-                if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx))
-                    ip.X = TopX(edge1, ip.Y);
-                else
-                    ip.X = TopX(edge2, ip.Y);
+                ip.Y = edge1.Top.Y > edge2.Top.Y ? edge1.Top.Y : edge2.Top.Y;
+                ip.X = TopX(Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx) ? edge1 : edge2, ip.Y);
             }
             //finally, don't allow 'ip' to be BELOW curr.Y (ie bottom of scanbeam) ...
             if (ip.Y > edge1.Curr.Y)
             {
                 ip.Y = edge1.Curr.Y;
                 //better to use the more vertical edge to derive X ...
-                if (Math.Abs(edge1.Dx) > Math.Abs(edge2.Dx))
-                    ip.X = TopX(edge2, ip.Y);
-                else
-                    ip.X = TopX(edge1, ip.Y);
+                ip.X = TopX(Math.Abs(edge1.Dx) > Math.Abs(edge2.Dx) ? edge2 : edge1, ip.Y);
             }
         }
+
         //------------------------------------------------------------------------------
 
-        private void ProcessEdgesAtTopOfScanbeam(long topY)
+        private void ProcessEdgesAtTopOfScanbeam(double topY)
         {
-            TEdge e = m_ActiveEdges;
+            var e = m_ActiveEdges;
             while (e != null)
             {
                 //1. process maxima, treating them as if they're 'bent' horizontal edges,
                 //   but exclude maxima with horizontal edges. nb: e can't be a horizontal.
-                bool IsMaximaEdge = IsMaxima(e, topY);
+                var IsMaximaEdge = IsMaxima(e, topY);
 
                 if (IsMaximaEdge)
                 {
-                    TEdge eMaxPair = GetMaximaPair(e);
+                    var eMaxPair = GetMaximaPair(e);
                     IsMaximaEdge = (eMaxPair == null || !IsHorizontal(eMaxPair));
                 }
 
                 if (IsMaximaEdge)
                 {
-                    TEdge ePrev = e.PrevInAEL;
+                    var ePrev = e.PrevInAEL;
                     DoMaxima(e);
-                    if (ePrev == null) e = m_ActiveEdges;
-                    else e = ePrev.NextInAEL;
+                    e = ePrev == null ? m_ActiveEdges : ePrev.NextInAEL;
                 }
                 else
                 {
@@ -2861,14 +2522,14 @@ namespace Route3D.Helpers
 
                     if (StrictlySimple)
                     {
-                        TEdge ePrev = e.PrevInAEL;
+                        var ePrev = e.PrevInAEL;
                         if ((e.OutIdx >= 0) && (e.WindDelta != 0) && ePrev != null &&
-                          (ePrev.OutIdx >= 0) && (ePrev.Curr.X == e.Curr.X) &&
-                          (ePrev.WindDelta != 0))
+                            (ePrev.OutIdx >= 0) && (Math.Abs(ePrev.Curr.X - e.Curr.X) < double.Epsilon) &&
+                            (ePrev.WindDelta != 0))
                         {
-                            IntPoint ip = new IntPoint(e.Curr);
-                            OutPt op = AddOutPt(ePrev, ip);
-                            OutPt op2 = AddOutPt(e, ip);
+                            var ip = new Point(e.Curr.X, e.Curr.Y);
+                            var op = AddOutPt(ePrev, ip);
+                            var op2 = AddOutPt(e, ip);
                             AddJoin(op, op2, ip); //StrictlySimple (type-3) join
                         }
                     }
@@ -2892,35 +2553,36 @@ namespace Route3D.Helpers
                     UpdateEdgeIntoAEL(ref e);
 
                     //if output polygons share an edge, they'll need joining later ...
-                    TEdge ePrev = e.PrevInAEL;
-                    TEdge eNext = e.NextInAEL;
-                    if (ePrev != null && ePrev.Curr.X == e.Bot.X &&
-                      ePrev.Curr.Y == e.Bot.Y && op != null &&
-                      ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
-                      SlopesEqual(e, ePrev, m_UseFullRange) &&
-                      (e.WindDelta != 0) && (ePrev.WindDelta != 0))
+                    var ePrev = e.PrevInAEL;
+                    var eNext = e.NextInAEL;
+                    if (ePrev != null && Math.Abs(ePrev.Curr.X - e.Bot.X) < double.Epsilon &&
+                        Math.Abs(ePrev.Curr.Y - e.Bot.Y) < double.Epsilon && op != null &&
+                        ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
+                        SlopesEqual(e, ePrev) &&
+                        (e.WindDelta != 0) && (ePrev.WindDelta != 0))
                     {
-                        OutPt op2 = AddOutPt(ePrev, e.Bot);
+                        var op2 = AddOutPt(ePrev, e.Bot);
                         AddJoin(op, op2, e.Top);
                     }
-                    else if (eNext != null && eNext.Curr.X == e.Bot.X &&
-                      eNext.Curr.Y == e.Bot.Y && op != null &&
-                      eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y &&
-                      SlopesEqual(e, eNext, m_UseFullRange) &&
-                      (e.WindDelta != 0) && (eNext.WindDelta != 0))
+                    else if (eNext != null && Math.Abs(eNext.Curr.X - e.Bot.X) < double.Epsilon &&
+                             Math.Abs(eNext.Curr.Y - e.Bot.Y) < double.Epsilon && op != null &&
+                             eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y &&
+                             SlopesEqual(e, eNext) &&
+                             (e.WindDelta != 0) && (eNext.WindDelta != 0))
                     {
-                        OutPt op2 = AddOutPt(eNext, e.Bot);
+                        var op2 = AddOutPt(eNext, e.Bot);
                         AddJoin(op, op2, e.Top);
                     }
                 }
                 e = e.NextInAEL;
             }
         }
+
         //------------------------------------------------------------------------------
 
         private void DoMaxima(TEdge e)
         {
-            TEdge eMaxPair = GetMaximaPair(e);
+            var eMaxPair = GetMaximaPair(e);
             if (eMaxPair == null)
             {
                 if (e.OutIdx >= 0)
@@ -2929,7 +2591,7 @@ namespace Route3D.Helpers
                 return;
             }
 
-            TEdge eNext = e.NextInAEL;
+            var eNext = e.NextInAEL;
             while (eNext != null && eNext != eMaxPair)
             {
                 IntersectEdges(e, eNext, e.Top);
@@ -2950,48 +2612,53 @@ namespace Route3D.Helpers
             }
             else throw new Exception("DoMaxima error");
         }
+
         //------------------------------------------------------------------------------
 
-        public static void ReversePaths(List<List<IntPoint>> polys)
+        public static void ReversePaths(List<List<Point>> polys)
         {
-            foreach (var poly in polys) { poly.Reverse(); }
+            foreach (var poly in polys)
+            {
+                poly.Reverse();
+            }
         }
+
         //------------------------------------------------------------------------------
 
-        public static bool Orientation(List<IntPoint> poly)
+        public static bool Orientation(List<Point> poly)
         {
             return Area(poly) >= 0;
         }
+
         //------------------------------------------------------------------------------
 
         private int PointCount(OutPt pts)
         {
             if (pts == null) return 0;
-            int result = 0;
-            OutPt p = pts;
+            var result = 0;
+            var p = pts;
             do
             {
                 result++;
                 p = p.Next;
-            }
-            while (p != pts);
+            } while (p != pts);
             return result;
         }
+
         //------------------------------------------------------------------------------
 
-        private void BuildResult(List<List<IntPoint>> polyg)
+        private void BuildResult(List<List<Point>> polyg)
         {
             polyg.Clear();
             polyg.Capacity = m_PolyOuts.Count;
-            for (int i = 0; i < m_PolyOuts.Count; i++)
+            foreach (var outRec in m_PolyOuts)
             {
-                OutRec outRec = m_PolyOuts[i];
                 if (outRec.Pts == null) continue;
-                OutPt p = outRec.Pts.Prev;
-                int cnt = PointCount(p);
+                var p = outRec.Pts.Prev;
+                var cnt = PointCount(p);
                 if (cnt < 2) continue;
-                List<IntPoint> pg = new List<IntPoint>(cnt);
-                for (int j = 0; j < cnt; j++)
+                var pg = new List<Point>(cnt);
+                for (var j = 0; j < cnt; j++)
                 {
                     pg.Add(p.Pt);
                     p = p.Prev;
@@ -2999,53 +2666,7 @@ namespace Route3D.Helpers
                 polyg.Add(pg);
             }
         }
-        //------------------------------------------------------------------------------
 
-        private void BuildResult2(PolyTree polytree)
-        {
-            polytree.Clear();
-
-            //add each output polygon/contour to polytree ...
-            polytree.m_AllPolys.Capacity = m_PolyOuts.Count;
-            for (int i = 0; i < m_PolyOuts.Count; i++)
-            {
-                OutRec outRec = m_PolyOuts[i];
-                int cnt = PointCount(outRec.Pts);
-                if ((outRec.IsOpen && cnt < 2) ||
-                  (!outRec.IsOpen && cnt < 3)) continue;
-                FixHoleLinkage(outRec);
-                PolyNode pn = new PolyNode();
-                polytree.m_AllPolys.Add(pn);
-                outRec.PolyNode = pn;
-                pn.m_polygon.Capacity = cnt;
-                OutPt op = outRec.Pts.Prev;
-                for (int j = 0; j < cnt; j++)
-                {
-                    pn.m_polygon.Add(op.Pt);
-                    op = op.Prev;
-                }
-            }
-
-            //fixup PolyNode links etc ...
-            polytree.m_Childs.Capacity = m_PolyOuts.Count;
-            foreach (OutRec outRec in m_PolyOuts)
-            {
-                if (outRec.PolyNode == null)
-                {
-                    continue;
-                }
-                else if (outRec.IsOpen)
-                {
-                    outRec.PolyNode.IsOpen = true;
-                    polytree.AddChild(outRec.PolyNode);
-                }
-                else if (outRec.FirstLeft != null &&
-                         outRec.FirstLeft.PolyNode != null)
-                    outRec.FirstLeft.PolyNode.AddChild(outRec.PolyNode);
-                else
-                    polytree.AddChild(outRec.PolyNode);
-            }
-        }
         //------------------------------------------------------------------------------
 
         private void FixupOutPolygon(OutRec outRec)
@@ -3054,8 +2675,8 @@ namespace Route3D.Helpers
             //parallel edges by removing the middle vertex.
             OutPt lastOK = null;
             outRec.BottomPt = null;
-            OutPt pp = outRec.Pts;
-            for (; ; )
+            var pp = outRec.Pts;
+            for (;;)
             {
                 if (pp.Prev == pp || pp.Prev == pp.Next)
                 {
@@ -3064,8 +2685,8 @@ namespace Route3D.Helpers
                 }
                 //test for duplicate points and collinear edges ...
                 if ((pp.Pt == pp.Next.Pt) || (pp.Pt == pp.Prev.Pt) ||
-                  (SlopesEqual(pp.Prev.Pt, pp.Pt, pp.Next.Pt, m_UseFullRange) &&
-                  (!PreserveCollinear || !Pt2IsBetweenPt1AndPt3(pp.Prev.Pt, pp.Pt, pp.Next.Pt))))
+                    (SlopesEqual(pp.Prev.Pt, pp.Pt, pp.Next.Pt) &&
+                     (!PreserveCollinear || !Pt2IsBetweenPt1AndPt3(pp.Prev.Pt, pp.Pt, pp.Next.Pt))))
                 {
                     lastOK = null;
                     pp.Prev.Next = pp.Next;
@@ -3081,13 +2702,17 @@ namespace Route3D.Helpers
             }
             outRec.Pts = pp;
         }
+
         //------------------------------------------------------------------------------
 
-        OutPt DupOutPt(OutPt outPt, bool InsertAfter)
+        private OutPt DupOutPt(OutPt outPt, bool InsertAfter)
         {
-            OutPt result = new OutPt();
-            result.Pt = outPt.Pt;
-            result.Idx = outPt.Idx;
+            var result = new OutPt
+            {
+                Pt = outPt.Pt,
+                Idx = outPt.Idx
+            };
+
             if (InsertAfter)
             {
                 result.Next = outPt.Next;
@@ -3104,31 +2729,49 @@ namespace Route3D.Helpers
             }
             return result;
         }
+
         //------------------------------------------------------------------------------
 
-        bool GetOverlap(long a1, long a2, long b1, long b2, out long Left, out long Right)
+        private bool GetOverlap(double a1, double a2, double b1, double b2, out double Left, out double Right)
         {
             if (a1 < a2)
             {
-                if (b1 < b2) { Left = Math.Max(a1, b1); Right = Math.Min(a2, b2); }
-                else { Left = Math.Max(a1, b2); Right = Math.Min(a2, b1); }
+                if (b1 < b2)
+                {
+                    Left = Math.Max(a1, b1);
+                    Right = Math.Min(a2, b2);
+                }
+                else
+                {
+                    Left = Math.Max(a1, b2);
+                    Right = Math.Min(a2, b1);
+                }
             }
             else
             {
-                if (b1 < b2) { Left = Math.Max(a2, b1); Right = Math.Min(a1, b2); }
-                else { Left = Math.Max(a2, b2); Right = Math.Min(a1, b1); }
+                if (b1 < b2)
+                {
+                    Left = Math.Max(a2, b1);
+                    Right = Math.Min(a1, b2);
+                }
+                else
+                {
+                    Left = Math.Max(a2, b2);
+                    Right = Math.Min(a1, b1);
+                }
             }
             return Left < Right;
         }
+
         //------------------------------------------------------------------------------
 
-        bool JoinHorz(OutPt op1, OutPt op1b, OutPt op2, OutPt op2b,
-          IntPoint Pt, bool DiscardLeft)
+        private bool JoinHorz(OutPt op1, OutPt op1b, OutPt op2, OutPt op2b,
+            Point Pt, bool DiscardLeft)
         {
-            Direction Dir1 = (op1.Pt.X > op1b.Pt.X ?
-              Direction.RightToLeft : Direction.LeftToRight);
-            Direction Dir2 = (op2.Pt.X > op2b.Pt.X ?
-              Direction.RightToLeft : Direction.LeftToRight);
+            var Dir1 = (op1.Pt.X > op1b.Pt.X ?
+                Direction.RightToLeft : Direction.LeftToRight);
+            var Dir2 = (op2.Pt.X > op2b.Pt.X ?
+                Direction.RightToLeft : Direction.LeftToRight);
             if (Dir1 == Dir2) return false;
 
             //When DiscardLeft, we want Op1b to be on the Left of Op1, otherwise we
@@ -3139,9 +2782,9 @@ namespace Route3D.Helpers
             if (Dir1 == Direction.LeftToRight)
             {
                 while (op1.Next.Pt.X <= Pt.X &&
-                  op1.Next.Pt.X >= op1.Pt.X && op1.Next.Pt.Y == Pt.Y)
+                       op1.Next.Pt.X >= op1.Pt.X && Math.Abs(op1.Next.Pt.Y - Pt.Y) < double.Epsilon)
                     op1 = op1.Next;
-                if (DiscardLeft && (op1.Pt.X != Pt.X)) op1 = op1.Next;
+                if (DiscardLeft && (Math.Abs(op1.Pt.X - Pt.X) > double.Epsilon)) op1 = op1.Next;
                 op1b = DupOutPt(op1, !DiscardLeft);
                 if (op1b.Pt != Pt)
                 {
@@ -3153,9 +2796,9 @@ namespace Route3D.Helpers
             else
             {
                 while (op1.Next.Pt.X >= Pt.X &&
-                  op1.Next.Pt.X <= op1.Pt.X && op1.Next.Pt.Y == Pt.Y)
+                       op1.Next.Pt.X <= op1.Pt.X && Math.Abs(op1.Next.Pt.Y - Pt.Y) < double.Epsilon)
                     op1 = op1.Next;
-                if (!DiscardLeft && (op1.Pt.X != Pt.X)) op1 = op1.Next;
+                if (!DiscardLeft && (Math.Abs(op1.Pt.X - Pt.X) > double.Epsilon)) op1 = op1.Next;
                 op1b = DupOutPt(op1, DiscardLeft);
                 if (op1b.Pt != Pt)
                 {
@@ -3168,9 +2811,9 @@ namespace Route3D.Helpers
             if (Dir2 == Direction.LeftToRight)
             {
                 while (op2.Next.Pt.X <= Pt.X &&
-                  op2.Next.Pt.X >= op2.Pt.X && op2.Next.Pt.Y == Pt.Y)
+                       op2.Next.Pt.X >= op2.Pt.X && Math.Abs(op2.Next.Pt.Y - Pt.Y) < double.Epsilon)
                     op2 = op2.Next;
-                if (DiscardLeft && (op2.Pt.X != Pt.X)) op2 = op2.Next;
+                if (DiscardLeft && (Math.Abs(op2.Pt.X - Pt.X) > double.Epsilon)) op2 = op2.Next;
                 op2b = DupOutPt(op2, !DiscardLeft);
                 if (op2b.Pt != Pt)
                 {
@@ -3182,9 +2825,9 @@ namespace Route3D.Helpers
             else
             {
                 while (op2.Next.Pt.X >= Pt.X &&
-                  op2.Next.Pt.X <= op2.Pt.X && op2.Next.Pt.Y == Pt.Y)
+                       op2.Next.Pt.X <= op2.Pt.X && Math.Abs(op2.Next.Pt.Y - Pt.Y) < double.Epsilon)
                     op2 = op2.Next;
-                if (!DiscardLeft && (op2.Pt.X != Pt.X)) op2 = op2.Next;
+                if (!DiscardLeft && (Math.Abs(op2.Pt.X - Pt.X) > double.Epsilon)) op2 = op2.Next;
                 op2b = DupOutPt(op2, DiscardLeft);
                 if (op2b.Pt != Pt)
                 {
@@ -3210,6 +2853,7 @@ namespace Route3D.Helpers
             }
             return true;
         }
+
         //------------------------------------------------------------------------------
 
         private bool JoinPoints(Join j, OutRec outRec1, OutRec outRec2)
@@ -3224,7 +2868,7 @@ namespace Route3D.Helpers
             //location at the Bottom of the overlapping segment (& Join.OffPt is above).
             //3. StrictlySimple joins where edges touch but are not collinear and where
             //Join.OutPt1, Join.OutPt2 & Join.OffPt all share the same point.
-            bool isHorizontal = (j.OutPt1.Pt.Y == j.OffPt.Y);
+            var isHorizontal = (Math.Abs(j.OutPt1.Pt.Y - j.OffPt.Y) < double.Epsilon);
 
             if (isHorizontal && (j.OffPt == j.OutPt1.Pt) && (j.OffPt == j.OutPt2.Pt))
             {
@@ -3233,11 +2877,11 @@ namespace Route3D.Helpers
                 op1b = j.OutPt1.Next;
                 while (op1b != op1 && (op1b.Pt == j.OffPt))
                     op1b = op1b.Next;
-                bool reverse1 = (op1b.Pt.Y > j.OffPt.Y);
+                var reverse1 = (op1b.Pt.Y > j.OffPt.Y);
                 op2b = j.OutPt2.Next;
                 while (op2b != op2 && (op2b.Pt == j.OffPt))
                     op2b = op2b.Next;
-                bool reverse2 = (op2b.Pt.Y > j.OffPt.Y);
+                var reverse2 = (op2b.Pt.Y > j.OffPt.Y);
                 if (reverse1 == reverse2) return false;
                 if (reverse1)
                 {
@@ -3270,20 +2914,20 @@ namespace Route3D.Helpers
                 //them we're not yet sure where the overlapping is. OutPt1.Pt & OutPt2.Pt
                 //may be anywhere along the horizontal edge.
                 op1b = op1;
-                while (op1.Prev.Pt.Y == op1.Pt.Y && op1.Prev != op1b && op1.Prev != op2)
+                while (Math.Abs(op1.Prev.Pt.Y - op1.Pt.Y) < double.Epsilon && op1.Prev != op1b && op1.Prev != op2)
                     op1 = op1.Prev;
-                while (op1b.Next.Pt.Y == op1b.Pt.Y && op1b.Next != op1 && op1b.Next != op2)
+                while (Math.Abs(op1b.Next.Pt.Y - op1b.Pt.Y) < double.Epsilon && op1b.Next != op1 && op1b.Next != op2)
                     op1b = op1b.Next;
                 if (op1b.Next == op1 || op1b.Next == op2) return false; //a flat 'polygon'
 
                 op2b = op2;
-                while (op2.Prev.Pt.Y == op2.Pt.Y && op2.Prev != op2b && op2.Prev != op1b)
+                while (Math.Abs(op2.Prev.Pt.Y - op2.Pt.Y) < double.Epsilon && op2.Prev != op2b && op2.Prev != op1b)
                     op2 = op2.Prev;
-                while (op2b.Next.Pt.Y == op2b.Pt.Y && op2b.Next != op2 && op2b.Next != op1)
+                while (Math.Abs(op2b.Next.Pt.Y - op2b.Pt.Y) < double.Epsilon && op2b.Next != op2 && op2b.Next != op1)
                     op2b = op2b.Next;
                 if (op2b.Next == op2 || op2b.Next == op1) return false; //a flat 'polygon'
 
-                long Left, Right;
+                double Left, Right;
                 //Op1 -. Op1b & Op2 -. Op2b are the extremites of the horizontal edges
                 if (!GetOverlap(op1.Pt.X, op1b.Pt.X, op2.Pt.X, op2b.Pt.X, out Left, out Right))
                     return false;
@@ -3291,23 +2935,27 @@ namespace Route3D.Helpers
                 //DiscardLeftSide: when overlapping edges are joined, a spike will created
                 //which needs to be cleaned up. However, we don't want Op1 or Op2 caught up
                 //on the discard Side as either may still be needed for other joins ...
-                IntPoint Pt;
+                Point Pt;
                 bool DiscardLeftSide;
                 if (op1.Pt.X >= Left && op1.Pt.X <= Right)
                 {
-                    Pt = op1.Pt; DiscardLeftSide = (op1.Pt.X > op1b.Pt.X);
+                    Pt = op1.Pt;
+                    DiscardLeftSide = (op1.Pt.X > op1b.Pt.X);
                 }
                 else if (op2.Pt.X >= Left && op2.Pt.X <= Right)
                 {
-                    Pt = op2.Pt; DiscardLeftSide = (op2.Pt.X > op2b.Pt.X);
+                    Pt = op2.Pt;
+                    DiscardLeftSide = (op2.Pt.X > op2b.Pt.X);
                 }
                 else if (op1b.Pt.X >= Left && op1b.Pt.X <= Right)
                 {
-                    Pt = op1b.Pt; DiscardLeftSide = op1b.Pt.X > op1.Pt.X;
+                    Pt = op1b.Pt;
+                    DiscardLeftSide = op1b.Pt.X > op1.Pt.X;
                 }
                 else
                 {
-                    Pt = op2b.Pt; DiscardLeftSide = (op2b.Pt.X > op2.Pt.X);
+                    Pt = op2b.Pt;
+                    DiscardLeftSide = (op2b.Pt.X > op2.Pt.X);
                 }
                 j.OutPt1 = op1;
                 j.OutPt2 = op2;
@@ -3322,29 +2970,29 @@ namespace Route3D.Helpers
                 //make sure the polygons are correctly oriented ...
                 op1b = op1.Next;
                 while ((op1b.Pt == op1.Pt) && (op1b != op1)) op1b = op1b.Next;
-                bool Reverse1 = ((op1b.Pt.Y > op1.Pt.Y) ||
-                  !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, m_UseFullRange));
+                var Reverse1 = ((op1b.Pt.Y > op1.Pt.Y) ||
+                                !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt));
                 if (Reverse1)
                 {
                     op1b = op1.Prev;
                     while ((op1b.Pt == op1.Pt) && (op1b != op1)) op1b = op1b.Prev;
                     if ((op1b.Pt.Y > op1.Pt.Y) ||
-                      !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt, m_UseFullRange)) return false;
+                        !SlopesEqual(op1.Pt, op1b.Pt, j.OffPt)) return false;
                 }
                 op2b = op2.Next;
                 while ((op2b.Pt == op2.Pt) && (op2b != op2)) op2b = op2b.Next;
-                bool Reverse2 = ((op2b.Pt.Y > op2.Pt.Y) ||
-                  !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, m_UseFullRange));
+                var Reverse2 = ((op2b.Pt.Y > op2.Pt.Y) ||
+                                !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt));
                 if (Reverse2)
                 {
                     op2b = op2.Prev;
                     while ((op2b.Pt == op2.Pt) && (op2b != op2)) op2b = op2b.Prev;
                     if ((op2b.Pt.Y > op2.Pt.Y) ||
-                      !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt, m_UseFullRange)) return false;
+                        !SlopesEqual(op2.Pt, op2b.Pt, j.OffPt)) return false;
                 }
 
                 if ((op1b == op1) || (op2b == op2) || (op1b == op2b) ||
-                  ((outRec1 == outRec2) && (Reverse1 == Reverse2))) return false;
+                    ((outRec1 == outRec2) && (Reverse1 == Reverse2))) return false;
 
                 if (Reverse1)
                 {
@@ -3372,157 +3020,37 @@ namespace Route3D.Helpers
                 }
             }
         }
-        //----------------------------------------------------------------------
 
-        public static int PointInPolygon(IntPoint pt, List<IntPoint> path)
-        {
-            //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
-            //See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
-            //http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
-            int result = 0, cnt = path.Count;
-            if (cnt < 3) return 0;
-            IntPoint ip = path[0];
-            for (int i = 1; i <= cnt; ++i)
-            {
-                IntPoint ipNext = (i == cnt ? path[0] : path[i]);
-                if (ipNext.Y == pt.Y)
-                {
-                    if ((ipNext.X == pt.X) || (ip.Y == pt.Y &&
-                      ((ipNext.X > pt.X) == (ip.X < pt.X)))) return -1;
-                }
-                if ((ip.Y < pt.Y) != (ipNext.Y < pt.Y))
-                {
-                    if (ip.X >= pt.X)
-                    {
-                        if (ipNext.X > pt.X) result = 1 - result;
-                        else
-                        {
-                            double d = (double)(ip.X - pt.X) * (ipNext.Y - pt.Y) -
-                              (double)(ipNext.X - pt.X) * (ip.Y - pt.Y);
-                            if (Math.Abs(d) < Double.Epsilon) return -1;
-                            else if ((d > 0) == (ipNext.Y > ip.Y)) result = 1 - result;
-                        }
-                    }
-                    else
-                    {
-                        if (ipNext.X > pt.X)
-                        {
-                            double d = (double)(ip.X - pt.X) * (ipNext.Y - pt.Y) -
-                              (double)(ipNext.X - pt.X) * (ip.Y - pt.Y);
-                            if (Math.Abs(d) < Double.Epsilon) return -1;
-                            else if ((d > 0) == (ipNext.Y > ip.Y)) result = 1 - result;
-                        }
-                    }
-                }
-                ip = ipNext;
-            }
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        private static int PointInPolygon(IntPoint pt, OutPt op)
-        {
-            //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
-            //See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
-            //http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
-            int result = 0;
-            OutPt startOp = op;
-            long ptx = pt.X, pty = pt.Y;
-            long poly0x = op.Pt.X, poly0y = op.Pt.Y;
-            do
-            {
-                op = op.Next;
-                long poly1x = op.Pt.X, poly1y = op.Pt.Y;
-
-                if (poly1y == pty)
-                {
-                    if ((poly1x == ptx) || (poly0y == pty &&
-                      ((poly1x > ptx) == (poly0x < ptx)))) return -1;
-                }
-                if ((poly0y < pty) != (poly1y < pty))
-                {
-                    if (poly0x >= ptx)
-                    {
-                        if (poly1x > ptx) result = 1 - result;
-                        else
-                        {
-                            double d = (double)(poly0x - ptx) * (poly1y - pty) -
-                              (double)(poly1x - ptx) * (poly0y - pty);
-                            if (Math.Abs(d) < Double.Epsilon) return -1;
-                            if ((d > 0) == (poly1y > poly0y)) result = 1 - result;
-                        }
-                    }
-                    else
-                    {
-                        if (poly1x > ptx)
-                        {
-                            double d = (double)(poly0x - ptx) * (poly1y - pty) -
-                              (double)(poly1x - ptx) * (poly0y - pty);
-                            if (Math.Abs(d) < Double.Epsilon) return -1;
-                            if ((d > 0) == (poly1y > poly0y)) result = 1 - result;
-                        }
-                    }
-                }
-                poly0x = poly1x; poly0y = poly1y;
-            } while (startOp != op);
-            return result;
-        }
+       
+       
         //------------------------------------------------------------------------------
 
         private static bool Poly2ContainsPoly1(OutPt outPt1, OutPt outPt2)
         {
-            OutPt op = outPt1;
+            var op = outPt1;
             do
             {
                 //nb: PointInPolygon returns 0 if false, +1 if true, -1 if pt on polygon
-                int res = PointInPolygon(op.Pt, outPt2);
-                if (res >= 0) return res > 0;
+                var res = op.Pt.IsPointInPolygon(outPt2);
+                
+                if (res.HasValue) 
+                    return res.Value;
+
                 op = op.Next;
-            }
-            while (op != outPt1);
+            } while (op != outPt1);
             return true;
         }
-        //----------------------------------------------------------------------
 
-        private void FixupFirstLefts1(OutRec OldOutRec, OutRec NewOutRec)
-        {
-            for (int i = 0; i < m_PolyOuts.Count; i++)
-            {
-                OutRec outRec = m_PolyOuts[i];
-                if (outRec.Pts == null || outRec.FirstLeft == null) continue;
-                OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
-                if (firstLeft == OldOutRec)
-                {
-                    if (Poly2ContainsPoly1(outRec.Pts, NewOutRec.Pts))
-                        outRec.FirstLeft = NewOutRec;
-                }
-            }
-        }
-        //----------------------------------------------------------------------
+       
 
-        private void FixupFirstLefts2(OutRec OldOutRec, OutRec NewOutRec)
-        {
-            foreach (OutRec outRec in m_PolyOuts)
-                if (outRec.FirstLeft == OldOutRec) outRec.FirstLeft = NewOutRec;
-        }
-        //----------------------------------------------------------------------
-
-        private static OutRec ParseFirstLeft(OutRec FirstLeft)
-        {
-            while (FirstLeft != null && FirstLeft.Pts == null)
-                FirstLeft = FirstLeft.FirstLeft;
-            return FirstLeft;
-        }
         //------------------------------------------------------------------------------
 
         private void JoinCommonEdges()
         {
-            for (int i = 0; i < m_Joins.Count; i++)
+            foreach (var jn in m_Joins)
             {
-                Join join = m_Joins[i];
-
-                OutRec outRec1 = GetOutRec(join.OutPt1.Idx);
-                OutRec outRec2 = GetOutRec(join.OutPt2.Idx);
+                var outRec1 = GetOutRec(jn.OutPt1.Idx);
+                var outRec2 = GetOutRec(jn.OutPt2.Idx);
 
                 if (outRec1.Pts == null || outRec2.Pts == null) continue;
 
@@ -3534,32 +3062,21 @@ namespace Route3D.Helpers
                 else if (Param1RightOfParam2(outRec2, outRec1)) holeStateRec = outRec1;
                 else holeStateRec = GetLowermostRec(outRec1, outRec2);
 
-                if (!JoinPoints(join, outRec1, outRec2)) continue;
+                if (!JoinPoints(jn, outRec1, outRec2)) continue;
 
                 if (outRec1 == outRec2)
                 {
                     //instead of joining two polygons, we've just created a new one by
                     //splitting one polygon into two.
-                    outRec1.Pts = join.OutPt1;
+                    outRec1.Pts = jn.OutPt1;
                     outRec1.BottomPt = null;
                     outRec2 = CreateOutRec();
-                    outRec2.Pts = join.OutPt2;
+                    outRec2.Pts = jn.OutPt2;
 
                     //update all OutRec2.Pts Idx's ...
                     UpdateOutPtIdxs(outRec2);
 
-                    //We now need to check every OutRec.FirstLeft pointer. If it points
-                    //to OutRec1 it may need to point to OutRec2 instead ...
-                    if (m_UsingPolyTree)
-                        for (int j = 0; j < m_PolyOuts.Count - 1; j++)
-                        {
-                            OutRec oRec = m_PolyOuts[j];
-                            if (oRec.Pts == null || ParseFirstLeft(oRec.FirstLeft) != outRec1 ||
-                              oRec.IsHole == outRec1.IsHole) continue;
-                            if (Poly2ContainsPoly1(oRec.Pts, join.OutPt2))
-                                oRec.FirstLeft = outRec2;
-                        }
-
+                   
                     if (Poly2ContainsPoly1(outRec2.Pts, outRec1.Pts))
                     {
                         //outRec2 is contained by outRec1 ...
@@ -3567,11 +3084,9 @@ namespace Route3D.Helpers
                         outRec2.FirstLeft = outRec1;
 
                         //fixup FirstLeft pointers that may need reassigning to OutRec1
-                        if (m_UsingPolyTree) FixupFirstLefts2(outRec2, outRec1);
-
+                       
                         if ((outRec2.IsHole ^ ReverseSolution) == (Area(outRec2) > 0))
                             ReversePolyPtLinks(outRec2.Pts);
-
                     }
                     else if (Poly2ContainsPoly1(outRec1.Pts, outRec2.Pts))
                     {
@@ -3582,8 +3097,7 @@ namespace Route3D.Helpers
                         outRec1.FirstLeft = outRec2;
 
                         //fixup FirstLeft pointers that may need reassigning to OutRec1
-                        if (m_UsingPolyTree) FixupFirstLefts2(outRec1, outRec2);
-
+                       
                         if ((outRec1.IsHole ^ ReverseSolution) == (Area(outRec1) > 0))
                             ReversePolyPtLinks(outRec1.Pts);
                     }
@@ -3594,9 +3108,7 @@ namespace Route3D.Helpers
                         outRec2.FirstLeft = outRec1.FirstLeft;
 
                         //fixup FirstLeft pointers that may need reassigning to OutRec2
-                        if (m_UsingPolyTree) FixupFirstLefts1(outRec1, outRec2);
                     }
-
                 }
                 else
                 {
@@ -3612,49 +3124,49 @@ namespace Route3D.Helpers
                     outRec2.FirstLeft = outRec1;
 
                     //fixup FirstLeft pointers that may need reassigning to OutRec1
-                    if (m_UsingPolyTree) FixupFirstLefts2(outRec2, outRec1);
                 }
             }
         }
+
         //------------------------------------------------------------------------------
 
         private void UpdateOutPtIdxs(OutRec outrec)
         {
-            OutPt op = outrec.Pts;
+            var op = outrec.Pts;
             do
             {
                 op.Idx = outrec.Idx;
                 op = op.Prev;
-            }
-            while (op != outrec.Pts);
+            } while (op != outrec.Pts);
         }
+
         //------------------------------------------------------------------------------
 
         private void DoSimplePolygons()
         {
-            int i = 0;
+            var i = 0;
             while (i < m_PolyOuts.Count)
             {
-                OutRec outrec = m_PolyOuts[i++];
-                OutPt op = outrec.Pts;
+                var outrec = m_PolyOuts[i++];
+                var op = outrec.Pts;
                 if (op == null || outrec.IsOpen) continue;
                 do //for each Pt in Polygon until duplicate found do ...
                 {
-                    OutPt op2 = op.Next;
+                    var op2 = op.Next;
                     while (op2 != outrec.Pts)
                     {
                         if ((op.Pt == op2.Pt) && op2.Next != op && op2.Prev != op)
                         {
                             //split the polygon into two ...
-                            OutPt op3 = op.Prev;
-                            OutPt op4 = op2.Prev;
+                            var op3 = op.Prev;
+                            var op4 = op2.Prev;
                             op.Prev = op4;
                             op4.Next = op;
                             op2.Prev = op3;
                             op3.Next = op2;
 
                             outrec.Pts = op;
-                            OutRec outrec2 = CreateOutRec();
+                            var outrec2 = CreateOutRec();
                             outrec2.Pts = op2;
                             UpdateOutPtIdxs(outrec2);
                             if (Poly2ContainsPoly1(outrec2.Pts, outrec.Pts))
@@ -3662,101 +3174,85 @@ namespace Route3D.Helpers
                                 //OutRec2 is contained by OutRec1 ...
                                 outrec2.IsHole = !outrec.IsHole;
                                 outrec2.FirstLeft = outrec;
-                                if (m_UsingPolyTree) FixupFirstLefts2(outrec2, outrec);
+                            }
+                            else if (Poly2ContainsPoly1(outrec.Pts, outrec2.Pts))
+                            {
+                                //OutRec1 is contained by OutRec2 ...
+                                outrec2.IsHole = outrec.IsHole;
+                                outrec.IsHole = !outrec2.IsHole;
+                                outrec2.FirstLeft = outrec.FirstLeft;
+                                outrec.FirstLeft = outrec2;
                             }
                             else
-                                if (Poly2ContainsPoly1(outrec.Pts, outrec2.Pts))
-                                {
-                                    //OutRec1 is contained by OutRec2 ...
-                                    outrec2.IsHole = outrec.IsHole;
-                                    outrec.IsHole = !outrec2.IsHole;
-                                    outrec2.FirstLeft = outrec.FirstLeft;
-                                    outrec.FirstLeft = outrec2;
-                                    if (m_UsingPolyTree) FixupFirstLefts2(outrec, outrec2);
-                                }
-                                else
-                                {
-                                    //the 2 polygons are separate ...
-                                    outrec2.IsHole = outrec.IsHole;
-                                    outrec2.FirstLeft = outrec.FirstLeft;
-                                    if (m_UsingPolyTree) FixupFirstLefts1(outrec, outrec2);
-                                }
+                            {
+                                //the 2 polygons are separate ...
+                                outrec2.IsHole = outrec.IsHole;
+                                outrec2.FirstLeft = outrec.FirstLeft;
+                            }
                             op2 = op; //ie get ready for the next iteration
                         }
                         op2 = op2.Next;
                     }
                     op = op.Next;
-                }
-                while (op != outrec.Pts);
+                } while (op != outrec.Pts);
             }
         }
+
         //------------------------------------------------------------------------------
 
-        public static double Area(List<IntPoint> poly)
+        public static double Area(List<Point> poly)
         {
-            int cnt = poly.Count;
+            var cnt = poly.Count;
             if (cnt < 3) return 0;
             double a = 0;
             for (int i = 0, j = cnt - 1; i < cnt; ++i)
             {
-                a += ((double)poly[j].X + poly[i].X) * ((double)poly[j].Y - poly[i].Y);
+                a += (poly[j].X + poly[i].X)*(poly[j].Y - poly[i].Y);
                 j = i;
             }
-            return -a * 0.5;
+            return -a*0.5;
         }
+
         //------------------------------------------------------------------------------
 
-        double Area(OutRec outRec)
+        private double Area(OutRec outRec)
         {
-            OutPt op = outRec.Pts;
+            var op = outRec.Pts;
             if (op == null) return 0;
             double a = 0;
             do
             {
-                a = a + (op.Prev.Pt.X + op.Pt.X) * (op.Prev.Pt.Y - op.Pt.Y);
+                a = a + (op.Prev.Pt.X + op.Pt.X)*(op.Prev.Pt.Y - op.Pt.Y);
                 op = op.Next;
             } while (op != outRec.Pts);
-            return a * 0.5;
+            return a*0.5;
         }
 
-        //------------------------------------------------------------------------------
-        // SimplifyPolygon functions ...
-        // Convert self-intersecting polygons into simple polygons
-        //------------------------------------------------------------------------------
-
-        public static List<List<IntPoint>> SimplifyPolygon(List<IntPoint> poly,
-              PolyFillType fillType = PolyFillType.EvenOdd)
-        {
-            List<List<IntPoint>> result = new List<List<IntPoint>>();
-            Clipper c = new Clipper();
-            c.StrictlySimple = true;
-            c.AddPath(poly, PolyType.Subject, true);
-            c.Execute(ClipType.Union, result, fillType, fillType);
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        public static List<List<IntPoint>> SimplifyPolygons(List<List<IntPoint>> polys,
+        public static List<List<Point>> SimplifyPolygon(List<Point> poly,
             PolyFillType fillType = PolyFillType.EvenOdd)
         {
-            List<List<IntPoint>> result = new List<List<IntPoint>>();
-            Clipper c = new Clipper();
-            c.StrictlySimple = true;
-            c.AddPaths(polys, PolyType.Subject, true);
+            var result = new List<List<Point>>();
+            var c = new Clipper {StrictlySimple = true};
+            c.AddPath(poly, PolyType.Subject);
             c.Execute(ClipType.Union, result, fillType, fillType);
             return result;
         }
+
         //------------------------------------------------------------------------------
 
-        private static double DistanceSqrd(IntPoint pt1, IntPoint pt2)
+        public static List<List<Point>> SimplifyPolygons(List<List<Point>> polys,
+            PolyFillType fillType = PolyFillType.EvenOdd)
         {
-            double dx = ((double)pt1.X - pt2.X);
-            double dy = ((double)pt1.Y - pt2.Y);
-            return (dx * dx + dy * dy);
+            var result = new List<List<Point>>();
+            var c = new Clipper {StrictlySimple = true};
+            c.AddPaths(polys, PolyType.Subject);
+            c.Execute(ClipType.Union, result, fillType, fillType);
+            return result;
         }
+
         //------------------------------------------------------------------------------
 
-        private static double DistanceFromLineSqrd(IntPoint pt, IntPoint ln1, IntPoint ln2)
+        private static double DistanceFromLineSqrd(Point pt, Point ln1, Point ln2)
         {
             //The equation of a line in general form (Ax + By + C = 0)
             //given 2 points (x¹,y¹) & (x²,y²) is ...
@@ -3764,16 +3260,17 @@ namespace Route3D.Helpers
             //A = (y¹ - y²); B = (x² - x¹); C = (y² - y¹)x¹ - (x² - x¹)y¹
             //perpendicular distance of point (x³,y³) = (Ax³ + By³ + C)/Sqrt(A² + B²)
             //see http://en.wikipedia.org/wiki/Perpendicular_distance
-            double A = ln1.Y - ln2.Y;
-            double B = ln2.X - ln1.X;
-            double C = A * ln1.X + B * ln1.Y;
-            C = A * pt.X + B * pt.Y - C;
-            return (C * C) / (A * A + B * B);
+            var A = ln1.Y - ln2.Y;
+            var B = ln2.X - ln1.X;
+            var C = A*ln1.X + B*ln1.Y;
+            C = A*pt.X + B*pt.Y - C;
+            return (C*C)/(A*A + B*B);
         }
+
         //---------------------------------------------------------------------------
 
-        private static bool SlopesNearCollinear(IntPoint pt1,
-            IntPoint pt2, IntPoint pt3, double distSqrd)
+        private static bool SlopesNearCollinear(Point pt1,
+            Point pt2, Point pt3, double distSqrd)
         {
             //this function is more accurate when the point that's GEOMETRICALLY 
             //between the other 2 points is the one that's tested for distance.  
@@ -3797,49 +3294,52 @@ namespace Route3D.Helpers
                     return DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
             }
         }
+
         //------------------------------------------------------------------------------
 
-        private static bool PointsAreClose(IntPoint pt1, IntPoint pt2, double distSqrd)
+        private static bool PointsAreClose(Point pt1, Point pt2, double distSqrd)
         {
-            double dx = (double)pt1.X - pt2.X;
-            double dy = (double)pt1.Y - pt2.Y;
-            return ((dx * dx) + (dy * dy) <= distSqrd);
+            var dx = pt1.X - pt2.X;
+            var dy = pt1.Y - pt2.Y;
+            return ((dx*dx) + (dy*dy) <= distSqrd);
         }
+
         //------------------------------------------------------------------------------
 
         private static OutPt ExcludeOp(OutPt op)
         {
-            OutPt result = op.Prev;
+            var result = op.Prev;
             result.Next = op.Next;
             op.Next.Prev = result;
             result.Idx = 0;
             return result;
         }
+
         //------------------------------------------------------------------------------
 
-        public static List<IntPoint> CleanPolygon(List<IntPoint> path, double distance = 1.415)
+        public static List<Point> CleanPolygon(List<Point> path, double distance = 1.415)
         {
             //distance = proximity in units/pixels below which vertices will be stripped. 
             //Default ~= sqrt(2) so when adjacent vertices or semi-adjacent vertices have 
             //both x & y coords within 1 unit, then the second vertex will be stripped.
 
-            int cnt = path.Count;
+            var cnt = path.Count;
 
-            if (cnt == 0) return new List<IntPoint>();
+            if (cnt == 0) return new List<Point>();
 
-            OutPt[] outPts = new OutPt[cnt];
-            for (int i = 0; i < cnt; ++i) outPts[i] = new OutPt();
+            var outPts = new OutPt[cnt];
+            for (var i = 0; i < cnt; ++i) outPts[i] = new OutPt();
 
-            for (int i = 0; i < cnt; ++i)
+            for (var i = 0; i < cnt; ++i)
             {
                 outPts[i].Pt = path[i];
-                outPts[i].Next = outPts[(i + 1) % cnt];
+                outPts[i].Next = outPts[(i + 1)%cnt];
                 outPts[i].Next.Prev = outPts[i];
                 outPts[i].Idx = 0;
             }
 
-            double distSqrd = distance * distance;
-            OutPt op = outPts[0];
+            var distSqrd = distance*distance;
+            var op = outPts[0];
             while (op.Idx == 0 && op.Next != op.Prev)
             {
                 if (PointsAreClose(op.Pt, op.Prev.Pt, distSqrd))
@@ -3866,633 +3366,115 @@ namespace Route3D.Helpers
             }
 
             if (cnt < 3) cnt = 0;
-            List<IntPoint> result = new List<IntPoint>(cnt);
-            for (int i = 0; i < cnt; ++i)
+            var result = new List<Point>(cnt);
+            for (var i = 0; i < cnt; ++i)
             {
                 result.Add(op.Pt);
                 op = op.Next;
             }
             return result;
         }
+
         //------------------------------------------------------------------------------
 
-        public static List<List<IntPoint>> CleanPolygons(List<List<IntPoint>> polys,
+        public static List<List<Point>> CleanPolygons(List<List<Point>> polys,
             double distance = 1.415)
         {
-            var result = new List<List<IntPoint>>(polys.Count);
+            var result = new List<List<Point>>(polys.Count);
             result.AddRange(polys.Select(t => CleanPolygon(t, distance)));
             return result;
         }
+
         //------------------------------------------------------------------------------
 
-        internal static List<List<IntPoint>> Minkowski(List<IntPoint> pattern, List<IntPoint> path, bool IsSum, bool IsClosed)
+        protected  static List<List<Point>> Minkowski(List<Point> pattern, List<Point> path, bool IsSum, bool IsClosed)
         {
-            int delta = (IsClosed ? 1 : 0);
-            int polyCnt = pattern.Count;
-            int pathCnt = path.Count;
-            List<List<IntPoint>> result = new List<List<IntPoint>>(pathCnt);
+            var delta = (IsClosed ? 1 : 0);
+            var polyCnt = pattern.Count;
+            var pathCnt = path.Count;
+            var result = new List<List<Point>>(pathCnt);
             if (IsSum)
-                for (int i = 0; i < pathCnt; i++)
+                for (var i = 0; i < pathCnt; i++)
                 {
-                    List<IntPoint> p = new List<IntPoint>(polyCnt);
-                    foreach (IntPoint ip in pattern)
-                        p.Add(new IntPoint(path[i].X + ip.X, path[i].Y + ip.Y));
+                    var p = new List<Point>(polyCnt);
+                    p.AddRange(pattern.Select(ip => new Point(path[i].X + ip.X, path[i].Y + ip.Y)));
                     result.Add(p);
                 }
             else
-                for (int i = 0; i < pathCnt; i++)
+                for (var i = 0; i < pathCnt; i++)
                 {
-                    List<IntPoint> p = new List<IntPoint>(polyCnt);
-                    foreach (IntPoint ip in pattern)
-                        p.Add(new IntPoint(path[i].X - ip.X, path[i].Y - ip.Y));
+                    var p = new List<Point>(polyCnt);
+                    p.AddRange(pattern.Select(ip => new Point(path[i].X - ip.X, path[i].Y - ip.Y)));
                     result.Add(p);
                 }
 
-            List<List<IntPoint>> quads = new List<List<IntPoint>>((pathCnt + delta) * (polyCnt + 1));
-            for (int i = 0; i < pathCnt - 1 + delta; i++)
-                for (int j = 0; j < polyCnt; j++)
+            var quads = new List<List<Point>>((pathCnt + delta)*(polyCnt + 1));
+            for (var i = 0; i < pathCnt - 1 + delta; i++)
+                for (var j = 0; j < polyCnt; j++)
                 {
-                    List<IntPoint> quad = new List<IntPoint>(4);
-                    quad.Add(result[i % pathCnt][j % polyCnt]);
-                    quad.Add(result[(i + 1) % pathCnt][j % polyCnt]);
-                    quad.Add(result[(i + 1) % pathCnt][(j + 1) % polyCnt]);
-                    quad.Add(result[i % pathCnt][(j + 1) % polyCnt]);
+                    var quad = new List<Point>
+                    {
+                        result[i%pathCnt][j%polyCnt],
+                        result[(i + 1)%pathCnt][j%polyCnt],
+                        result[(i + 1)%pathCnt][(j + 1)%polyCnt],
+                        result[i%pathCnt][(j + 1)%polyCnt]
+                    };
                     if (!Orientation(quad)) quad.Reverse();
                     quads.Add(quad);
                 }
             return quads;
         }
+
         //------------------------------------------------------------------------------
 
-        public static List<List<IntPoint>> MinkowskiSum(List<IntPoint> pattern, List<IntPoint> path, bool pathIsClosed)
+        public static List<List<Point>> MinkowskiSum(List<Point> pattern, List<Point> path, bool pathIsClosed)
         {
-            List<List<IntPoint>> paths = Minkowski(pattern, path, true, pathIsClosed);
-            Clipper c = new Clipper();
-            c.AddPaths(paths, PolyType.Subject, true);
+            var paths = Minkowski(pattern, path, true, pathIsClosed);
+            var c = new Clipper();
+            c.AddPaths(paths, PolyType.Subject);
             c.Execute(ClipType.Union, paths, PolyFillType.NonZero, PolyFillType.NonZero);
             return paths;
         }
+
         //------------------------------------------------------------------------------
 
-        private static List<IntPoint> TranslatePath(List<IntPoint> path, IntPoint delta)
+        private static List<Point> TranslatePath(List<Point> path, Point delta)
         {
-            List<IntPoint> outPath = new List<IntPoint>(path.Count);
-            for (int i = 0; i < path.Count; i++)
-                outPath.Add(new IntPoint(path[i].X + delta.X, path[i].Y + delta.Y));
+            var outPath = new List<Point>(path.Count);
+            outPath.AddRange(path.Select(t => new Point(t.X + delta.X, t.Y + delta.Y)));
             return outPath;
         }
+
         //------------------------------------------------------------------------------
 
-        public static List<List<IntPoint>> MinkowskiSum(List<IntPoint> pattern, List<List<IntPoint>> paths, bool pathIsClosed)
+        public static List<List<Point>> MinkowskiSum(List<Point> pattern, List<List<Point>> paths, bool pathIsClosed)
         {
-            List<List<IntPoint>> solution = new List<List<IntPoint>>();
-            Clipper c = new Clipper();
-            for (int i = 0; i < paths.Count; ++i)
+            var solution = new List<List<Point>>();
+            var c = new Clipper();
+            foreach (var pathx in paths)
             {
-                List<List<IntPoint>> tmp = Minkowski(pattern, paths[i], true, pathIsClosed);
-                c.AddPaths(tmp, PolyType.Subject, true);
+                var tmp = Minkowski(pattern, pathx, true, pathIsClosed);
+                c.AddPaths(tmp, PolyType.Subject);
                 if (pathIsClosed)
                 {
-                    List<IntPoint> path = TranslatePath(paths[i], pattern[0]);
-                    c.AddPath(path, PolyType.Clip, true);
+                    var path = TranslatePath(pathx, pattern[0]);
+                    c.AddPath(path, PolyType.Clip);
                 }
             }
             c.Execute(ClipType.Union, solution,
-              PolyFillType.NonZero, PolyFillType.NonZero);
+                PolyFillType.NonZero, PolyFillType.NonZero);
             return solution;
         }
+
         //------------------------------------------------------------------------------
 
-        public static List<List<IntPoint>> MinkowskiDiff(List<IntPoint> poly1, List<IntPoint> poly2)
+        public static List<List<Point>> MinkowskiDiff(List<Point> poly1, List<Point> poly2)
         {
-            List<List<IntPoint>> paths = Minkowski(poly1, poly2, false, true);
-            Clipper c = new Clipper();
-            c.AddPaths(paths, PolyType.Subject, true);
+            var paths = Minkowski(poly1, poly2, false, true);
+            var c = new Clipper();
+            c.AddPaths(paths, PolyType.Subject);
             c.Execute(ClipType.Union, paths, PolyFillType.NonZero, PolyFillType.NonZero);
             return paths;
         }
-        //------------------------------------------------------------------------------
-
-        internal enum NodeType { ntAny, ntOpen, ntClosed };
-
-        public static List<List<IntPoint>> PolyTreeToPaths(PolyTree polytree)
-        {
-
-            List<List<IntPoint>> result = new List<List<IntPoint>>();
-            result.Capacity = polytree.Total;
-            AddPolyNodeToPaths(polytree, NodeType.ntAny, result);
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        internal static void AddPolyNodeToPaths(PolyNode polynode, NodeType nt, List<List<IntPoint>> paths)
-        {
-            bool match = true;
-            switch (nt)
-            {
-                case NodeType.ntOpen: return;
-                case NodeType.ntClosed: match = !polynode.IsOpen; break;
-            }
-
-            if (polynode.m_polygon.Count > 0 && match)
-                paths.Add(polynode.m_polygon);
-            foreach (PolyNode pn in polynode.Childs)
-                AddPolyNodeToPaths(pn, nt, paths);
-        }
-        //------------------------------------------------------------------------------
-
-        public static List<List<IntPoint>> OpenPathsFromPolyTree(PolyTree polytree)
-        {
-            List<List<IntPoint>> result = new List<List<IntPoint>> { Capacity = polytree.ChildCount };
-            for (int i = 0; i < polytree.ChildCount; i++)
-                if (polytree.Childs[i].IsOpen)
-                    result.Add(polytree.Childs[i].m_polygon);
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
-        public static List<List<IntPoint>> ClosedPathsFromPolyTree(PolyTree polytree)
-        {
-            List<List<IntPoint>> result = new List<List<IntPoint>> { Capacity = polytree.Total };
-            AddPolyNodeToPaths(polytree, NodeType.ntClosed, result);
-            return result;
-        }
-        //------------------------------------------------------------------------------
-
     } //end Clipper
-
-    public class ClipperOffset
-    {
-        private List<List<IntPoint>> m_destPolys;
-        private List<IntPoint> m_srcPoly;
-        private List<IntPoint> m_destPoly;
-        private List<Point> m_normals = new List<Point>();
-        private double m_delta, m_sinA, m_sin, m_cos;
-        private double m_miterLim, m_StepsPerRad;
-
-        private IntPoint m_lowest;
-        private PolyNode m_polyNodes = new PolyNode();
-
-        public double ArcTolerance { get; set; }
-        public double MiterLimit { get; set; }
-
-        private const double two_pi = Math.PI * 2;
-        private const double def_arc_tolerance = 0.25;
-
-        public ClipperOffset(
-          double miterLimit = 2.0, double arcTolerance = def_arc_tolerance)
-        {
-            MiterLimit = miterLimit;
-            ArcTolerance = arcTolerance;
-            m_lowest.X = -1;
-        }
-        //------------------------------------------------------------------------------
-
-        public void Clear()
-        {
-            m_polyNodes.Childs.Clear();
-            m_lowest.X = -1;
-        }
-        //------------------------------------------------------------------------------
-
-        internal static long Round(double value)
-        {
-            return value < 0 ? (long)(value - 0.5) : (long)(value + 0.5);
-        }
-        //------------------------------------------------------------------------------
-
-        public void AddPath(List<IntPoint> path, JoinType joinType, EndType endType)
-        {
-            int highI = path.Count - 1;
-            if (highI < 0) return;
-            PolyNode newNode = new PolyNode();
-            newNode.m_jointype = joinType;
-            newNode.m_endtype = endType;
-
-            //strip duplicate points from path and also get index to the lowest point ...
-            if (endType == EndType.ClosedLine || endType == EndType.ClosedPolygon)
-                while (highI > 0 && path[0] == path[highI]) highI--;
-            newNode.m_polygon.Capacity = highI + 1;
-            newNode.m_polygon.Add(path[0]);
-            int j = 0, k = 0;
-            for (int i = 1; i <= highI; i++)
-                if (newNode.m_polygon[j] != path[i])
-                {
-                    j++;
-                    newNode.m_polygon.Add(path[i]);
-                    if (path[i].Y > newNode.m_polygon[k].Y ||
-                      (path[i].Y == newNode.m_polygon[k].Y &&
-                      path[i].X < newNode.m_polygon[k].X)) k = j;
-                }
-            if (endType == EndType.ClosedPolygon && j < 2) return;
-
-            m_polyNodes.AddChild(newNode);
-
-            //if this path's lowest pt is lower than all the others then update m_lowest
-            if (endType != EndType.ClosedPolygon) return;
-            if (m_lowest.X < 0)
-                m_lowest = new IntPoint(m_polyNodes.ChildCount - 1, k);
-            else
-            {
-                IntPoint ip = m_polyNodes.Childs[(int)m_lowest.X].m_polygon[(int)m_lowest.Y];
-                if (newNode.m_polygon[k].Y > ip.Y ||
-                  (newNode.m_polygon[k].Y == ip.Y &&
-                  newNode.m_polygon[k].X < ip.X))
-                    m_lowest = new IntPoint(m_polyNodes.ChildCount - 1, k);
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        public void AddPaths(List<List<IntPoint>> paths, JoinType joinType, EndType endType)
-        {
-            foreach (List<IntPoint> p in paths)
-                AddPath(p, joinType, endType);
-        }
-        //------------------------------------------------------------------------------
-
-        private void FixOrientations()
-        {
-            //fixup orientations of all closed paths if the orientation of the
-            //closed path with the lowermost vertex is wrong ...
-            if (m_lowest.X >= 0 &&
-              !Clipper.Orientation(m_polyNodes.Childs[(int)m_lowest.X].m_polygon))
-            {
-                for (int i = 0; i < m_polyNodes.ChildCount; i++)
-                {
-                    PolyNode node = m_polyNodes.Childs[i];
-                    if (node.m_endtype == EndType.ClosedPolygon ||
-                      (node.m_endtype == EndType.ClosedLine &&
-                      Clipper.Orientation(node.m_polygon)))
-                        node.m_polygon.Reverse();
-                }
-            }
-            else
-            {
-                for (int i = 0; i < m_polyNodes.ChildCount; i++)
-                {
-                    PolyNode node = m_polyNodes.Childs[i];
-                    if (node.m_endtype == EndType.ClosedLine &&
-                      !Clipper.Orientation(node.m_polygon))
-                        node.m_polygon.Reverse();
-                }
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        internal static Point GetUnitNormal(IntPoint pt1, IntPoint pt2)
-        {
-            double dx = (pt2.X - pt1.X);
-            double dy = (pt2.Y - pt1.Y);
-            if ((Math.Abs(dx) < Double.Epsilon) && (Math.Abs(dy) < Double.Epsilon)) return new Point();
-
-            double f = 1 * 1.0 / Math.Sqrt(dx * dx + dy * dy);
-            dx *= f;
-            dy *= f;
-
-            return new Point(dy, -dx);
-        }
-        //------------------------------------------------------------------------------
-
-        private void DoOffset(double delta)
-        {
-            m_destPolys = new List<List<IntPoint>>();
-            m_delta = delta;
-
-            //if Zero offset, just copy any CLOSED polygons to m_p and return ...
-            if (ClipperBase.near_zero(delta))
-            {
-                m_destPolys.Capacity = m_polyNodes.ChildCount;
-                for (int i = 0; i < m_polyNodes.ChildCount; i++)
-                {
-                    PolyNode node = m_polyNodes.Childs[i];
-                    if (node.m_endtype == EndType.ClosedPolygon)
-                        m_destPolys.Add(node.m_polygon);
-                }
-                return;
-            }
-
-            //see offset_triginometry3.svg in the documentation folder ...
-            if (MiterLimit > 2) m_miterLim = 2 / (MiterLimit * MiterLimit);
-            else m_miterLim = 0.5;
-
-            double y;
-            if (ArcTolerance <= 0.0)
-                y = def_arc_tolerance;
-            else if (ArcTolerance > Math.Abs(delta) * def_arc_tolerance)
-                y = Math.Abs(delta) * def_arc_tolerance;
-            else
-                y = ArcTolerance;
-            //see offset_triginometry2.svg in the documentation folder ...
-            double steps = Math.PI / Math.Acos(1 - y / Math.Abs(delta));
-            m_sin = Math.Sin(two_pi / steps);
-            m_cos = Math.Cos(two_pi / steps);
-            m_StepsPerRad = steps / two_pi;
-            if (delta < 0.0) m_sin = -m_sin;
-
-            m_destPolys.Capacity = m_polyNodes.ChildCount * 2;
-            for (int i = 0; i < m_polyNodes.ChildCount; i++)
-            {
-                PolyNode node = m_polyNodes.Childs[i];
-                m_srcPoly = node.m_polygon;
-
-                int len = m_srcPoly.Count;
-
-                if (len == 0 || (delta <= 0 && (len < 3 ||
-                  node.m_endtype != EndType.ClosedPolygon)))
-                    continue;
-
-                m_destPoly = new List<IntPoint>();
-
-                if (len == 1)
-                {
-                    if (node.m_jointype == JoinType.Round)
-                    {
-                        double X = 1.0, Y = 0.0;
-                        for (int j = 1; j <= steps; j++)
-                        {
-                            m_destPoly.Add(new IntPoint(
-                              Round(m_srcPoly[0].X + X * delta),
-                              Round(m_srcPoly[0].Y + Y * delta)));
-                            double X2 = X;
-                            X = X * m_cos - m_sin * Y;
-                            Y = X2 * m_sin + Y * m_cos;
-                        }
-                    }
-                    else
-                    {
-                        double X = -1.0, Y = -1.0;
-                        for (int j = 0; j < 4; ++j)
-                        {
-                            m_destPoly.Add(new IntPoint(
-                              Round(m_srcPoly[0].X + X * delta),
-                              Round(m_srcPoly[0].Y + Y * delta)));
-                            if (X < 0) X = 1;
-                            else if (Y < 0) Y = 1;
-                            else X = -1;
-                        }
-                    }
-                    m_destPolys.Add(m_destPoly);
-                    continue;
-                }
-
-                //build m_normals ...
-                m_normals.Clear();
-                m_normals.Capacity = len;
-                for (int j = 0; j < len - 1; j++)
-                    m_normals.Add(GetUnitNormal(m_srcPoly[j], m_srcPoly[j + 1]));
-                if (node.m_endtype == EndType.ClosedLine ||
-                  node.m_endtype == EndType.ClosedPolygon)
-                    m_normals.Add(GetUnitNormal(m_srcPoly[len - 1], m_srcPoly[0]));
-                else
-                    m_normals.Add(new Point(m_normals[len - 2].X, m_normals[len - 2].Y));
-
-                if (node.m_endtype == EndType.ClosedPolygon)
-                {
-                    int k = len - 1;
-                    for (int j = 0; j < len; j++)
-                        OffsetPoint(j, ref k, node.m_jointype);
-                    m_destPolys.Add(m_destPoly);
-                }
-                else if (node.m_endtype == EndType.ClosedLine)
-                {
-                    int k = len - 1;
-                    for (int j = 0; j < len; j++)
-                        OffsetPoint(j, ref k, node.m_jointype);
-                    m_destPolys.Add(m_destPoly);
-                    m_destPoly = new List<IntPoint>();
-                    //re-build m_normals ...
-                    Point n = m_normals[len - 1];
-                    for (int j = len - 1; j > 0; j--)
-                        m_normals[j] = new Point(-m_normals[j - 1].X, -m_normals[j - 1].Y);
-                    m_normals[0] = new Point(-n.X, -n.Y);
-                    k = 0;
-                    for (int j = len - 1; j >= 0; j--)
-                        OffsetPoint(j, ref k, node.m_jointype);
-                    m_destPolys.Add(m_destPoly);
-                }
-                else
-                {
-                    int k = 0;
-                    for (int j = 1; j < len - 1; ++j)
-                        OffsetPoint(j, ref k, node.m_jointype);
-
-                    IntPoint pt1;
-                    if (node.m_endtype == EndType.OpenButt)
-                    {
-                        int j = len - 1;
-                        pt1 = new IntPoint(Round(m_srcPoly[j].X + m_normals[j].X *
-                          delta), Round(m_srcPoly[j].Y + m_normals[j].Y * delta));
-                        m_destPoly.Add(pt1);
-                        pt1 = new IntPoint(Round(m_srcPoly[j].X - m_normals[j].X *
-                          delta), Round(m_srcPoly[j].Y - m_normals[j].Y * delta));
-                        m_destPoly.Add(pt1);
-                    }
-                    else
-                    {
-                        int j = len - 1;
-                        k = len - 2;
-                        m_sinA = 0;
-                        m_normals[j] = new Point(-m_normals[j].X, -m_normals[j].Y);
-                        if (node.m_endtype == EndType.OpenSquare)
-                            DoSquare(j, k);
-                        else
-                            DoRound(j, k);
-                    }
-
-                    //re-build m_normals ...
-                    for (int j = len - 1; j > 0; j--)
-                        m_normals[j] = new Point(-m_normals[j - 1].X, -m_normals[j - 1].Y);
-
-                    m_normals[0] = new Point(-m_normals[1].X, -m_normals[1].Y);
-
-                    k = len - 1;
-                    for (int j = k - 1; j > 0; --j)
-                        OffsetPoint(j, ref k, node.m_jointype);
-
-                    if (node.m_endtype == EndType.OpenButt)
-                    {
-                        pt1 = new IntPoint(Round(m_srcPoly[0].X - m_normals[0].X * delta), Round(m_srcPoly[0].Y - m_normals[0].Y * delta));
-                        m_destPoly.Add(pt1);
-                        pt1 = new IntPoint(Round(m_srcPoly[0].X + m_normals[0].X * delta), Round(m_srcPoly[0].Y + m_normals[0].Y * delta));
-                        m_destPoly.Add(pt1);
-                    }
-                    else
-                    {
-                        m_sinA = 0;
-                        if (node.m_endtype == EndType.OpenSquare)
-                            DoSquare(0, 1);
-                        else
-                            DoRound(0, 1);
-                    }
-                    m_destPolys.Add(m_destPoly);
-                }
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        public void Execute(ref List<List<IntPoint>> solution, double delta)
-        {
-            solution.Clear();
-            FixOrientations();
-            DoOffset(delta);
-            //now clean up 'corners' ...
-            Clipper clpr = new Clipper();
-            clpr.AddPaths(m_destPolys, PolyType.Subject, true);
-            if (delta > 0)
-            {
-                clpr.Execute(ClipType.Union, solution,
-                  PolyFillType.Positive, PolyFillType.Positive);
-            }
-            else
-            {
-                IntRect r = Clipper.GetBounds(m_destPolys);
-                List<IntPoint> outer = new List<IntPoint>(4);
-
-                outer.Add(new IntPoint(r.left - 10, r.bottom + 10));
-                outer.Add(new IntPoint(r.right + 10, r.bottom + 10));
-                outer.Add(new IntPoint(r.right + 10, r.top - 10));
-                outer.Add(new IntPoint(r.left - 10, r.top - 10));
-
-                clpr.AddPath(outer, PolyType.Subject, true);
-                clpr.ReverseSolution = true;
-                clpr.Execute(ClipType.Union, solution, PolyFillType.Negative, PolyFillType.Negative);
-                if (solution.Count > 0) solution.RemoveAt(0);
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        public void Execute(ref PolyTree solution, double delta)
-        {
-            solution.Clear();
-            FixOrientations();
-            DoOffset(delta);
-
-            //now clean up 'corners' ...
-            Clipper clpr = new Clipper();
-            clpr.AddPaths(m_destPolys, PolyType.Subject, true);
-            if (delta > 0)
-            {
-                clpr.Execute(ClipType.Union, solution,
-                  PolyFillType.Positive, PolyFillType.Positive);
-            }
-            else
-            {
-                IntRect r = Clipper.GetBounds(m_destPolys);
-                List<IntPoint> outer = new List<IntPoint>(4);
-
-                outer.Add(new IntPoint(r.left - 10, r.bottom + 10));
-                outer.Add(new IntPoint(r.right + 10, r.bottom + 10));
-                outer.Add(new IntPoint(r.right + 10, r.top - 10));
-                outer.Add(new IntPoint(r.left - 10, r.top - 10));
-
-                clpr.AddPath(outer, PolyType.Subject, true);
-                clpr.ReverseSolution = true;
-                clpr.Execute(ClipType.Union, solution, PolyFillType.Negative, PolyFillType.Negative);
-                //remove the outer PolyNode rectangle ...
-                if (solution.ChildCount == 1 && solution.Childs[0].ChildCount > 0)
-                {
-                    PolyNode outerNode = solution.Childs[0];
-                    solution.Childs.Capacity = outerNode.ChildCount;
-                    solution.Childs[0] = outerNode.Childs[0];
-                    solution.Childs[0].m_Parent = solution;
-                    for (int i = 1; i < outerNode.ChildCount; i++)
-                        solution.AddChild(outerNode.Childs[i]);
-                }
-                else
-                    solution.Clear();
-            }
-        }
-        //------------------------------------------------------------------------------
-
-        void OffsetPoint(int j, ref int k, JoinType jointype)
-        {
-            //cross product ...
-            m_sinA = (m_normals[k].X * m_normals[j].Y - m_normals[j].X * m_normals[k].Y);
-
-            if (Math.Abs(m_sinA * m_delta) < 1.0)
-            {
-                //dot product ...
-                double cosA = (m_normals[k].X * m_normals[j].X + m_normals[j].Y * m_normals[k].Y);
-                if (cosA > 0) // angle ==> 0 degrees
-                {
-                    m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + m_normals[k].X * m_delta),
-                      Round(m_srcPoly[j].Y + m_normals[k].Y * m_delta)));
-                    return;
-                }
-                //else angle ==> 180 degrees   
-            }
-            else if (m_sinA > 1.0) m_sinA = 1.0;
-            else if (m_sinA < -1.0) m_sinA = -1.0;
-
-            if (m_sinA * m_delta < 0)
-            {
-                m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + m_normals[k].X * m_delta),
-                  Round(m_srcPoly[j].Y + m_normals[k].Y * m_delta)));
-                m_destPoly.Add(m_srcPoly[j]);
-                m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + m_normals[j].X * m_delta),
-                  Round(m_srcPoly[j].Y + m_normals[j].Y * m_delta)));
-            }
-            else
-                switch (jointype)
-                {
-                    case JoinType.Miter:
-                        {
-                            double r = 1 + (m_normals[j].X * m_normals[k].X +
-                              m_normals[j].Y * m_normals[k].Y);
-                            if (r >= m_miterLim) DoMiter(j, k, r); else DoSquare(j, k);
-                            break;
-                        }
-                    case JoinType.Square: DoSquare(j, k); break;
-                    case JoinType.Round: DoRound(j, k); break;
-                }
-            k = j;
-        }
-        //------------------------------------------------------------------------------
-
-        internal void DoSquare(int j, int k)
-        {
-            double dx = Math.Tan(Math.Atan2(m_sinA,
-                m_normals[k].X * m_normals[j].X + m_normals[k].Y * m_normals[j].Y) / 4);
-            m_destPoly.Add(new IntPoint(
-                Round(m_srcPoly[j].X + m_delta * (m_normals[k].X - m_normals[k].Y * dx)),
-                Round(m_srcPoly[j].Y + m_delta * (m_normals[k].Y + m_normals[k].X * dx))));
-            m_destPoly.Add(new IntPoint(
-                Round(m_srcPoly[j].X + m_delta * (m_normals[j].X + m_normals[j].Y * dx)),
-                Round(m_srcPoly[j].Y + m_delta * (m_normals[j].Y - m_normals[j].X * dx))));
-        }
-        //------------------------------------------------------------------------------
-
-        internal void DoMiter(int j, int k, double r)
-        {
-            double q = m_delta / r;
-            m_destPoly.Add(new IntPoint(Round(m_srcPoly[j].X + (m_normals[k].X + m_normals[j].X) * q),
-                Round(m_srcPoly[j].Y + (m_normals[k].Y + m_normals[j].Y) * q)));
-        }
-        //------------------------------------------------------------------------------
-
-        internal void DoRound(int j, int k)
-        {
-            double a = Math.Atan2(m_sinA,
-            m_normals[k].X * m_normals[j].X + m_normals[k].Y * m_normals[j].Y);
-            int steps = Math.Max((int)Round(m_StepsPerRad * Math.Abs(a)), 1);
-
-            double X = m_normals[k].X, Y = m_normals[k].Y, X2;
-            for (int i = 0; i < steps; ++i)
-            {
-                m_destPoly.Add(new IntPoint(
-                    Round(m_srcPoly[j].X + X * m_delta),
-                    Round(m_srcPoly[j].Y + Y * m_delta)));
-                X2 = X;
-                X = X * m_cos - m_sin * Y;
-                Y = X2 * m_sin + Y * m_cos;
-            }
-            m_destPoly.Add(new IntPoint(
-            Round(m_srcPoly[j].X + m_normals[j].X * m_delta),
-            Round(m_srcPoly[j].Y + m_normals[j].Y * m_delta)));
-        }
-        //------------------------------------------------------------------------------
-    }
-
-   
-
 }

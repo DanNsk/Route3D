@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices.ComTypes;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
@@ -11,39 +11,112 @@ namespace Route3D.Helpers
 {
     public static class GeometryHelper
     {
-        public static List<List<IntPoint>> ChangePointUnits(this List<List<Point3D>> points, double eps)
+        public static readonly IList<Color> GoodColors = typeof(Colors).GetProperties(BindingFlags.Static | BindingFlags.Public).Where(p => p.PropertyType == typeof(Color)).Select(p => (Color)p.GetValue(null)).Where(c => !c.Equals(Colors.White) && !c.Equals(Colors.Transparent)).ToList();
+
+
+        public static List<List<Point>> ChangePointUnits(this List<List<Point3D>> points)
         {
-            return points == null ? null : points.Select(x => x.Select(y => new IntPoint(y.X / eps, y.Y / eps)).ToList()).ToList();
+            return points == null ? null : points.Select(x => x.Select(y => new Point(y.X, y.Y)).ToList()).ToList();
         }
 
-        public static List<List<Point3D>> ChangePointUnits(this List<List<IntPoint>> points, double z, double eps)
+        public static List<List<Point3D>> ChangePointUnits(this List<List<Point>> points, double z)
         {
-            return points == null ? null : points.Select(x => x.Select(y => new Point3D(y.X * eps, y.Y * eps, z)).ToList()).ToList();
+            return points == null ? null : points.Select(x => x.Select(y => new Point3D(y.X, y.Y, z)).ToList()).ToList();
         }
+
+        //----------------------------------------------------------------------
+
+        public static bool? IsPointInPolygon(this Point pt, IEnumerable<Point> pathen)
+        {
+            //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
+            //See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
+            //http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
+            
+            var path = pathen.GetEnumerator();
+
+            // ReSharper disable once ConditionIsAlwaysTrueOrFalse
+            if (path == null || !path.MoveNext())
+                return false;
+
+            var result = false;
+
+
+            var ip = path.Current;
+            var first = ip;
+            bool finished;
+
+            do
+            {
+                finished = !path.MoveNext();
+
+                var ipNext = (finished ? first : path.Current);
+                if (Math.Abs(ipNext.Y - pt.Y) < double.Epsilon)
+                {
+                    if ((Math.Abs(ipNext.X - pt.X) < double.Epsilon) || (Math.Abs(ip.Y - pt.Y) < double.Epsilon &&
+                                                                         ((ipNext.X > pt.X) == (ip.X < pt.X)))) return null;
+                }
+                if ((ip.Y < pt.Y) != (ipNext.Y < pt.Y))
+                {
+                    if (ip.X >= pt.X)
+                    {
+                        if (ipNext.X > pt.X) result = !result;
+                        else
+                        {
+                            var d = (ip.X - pt.X)*(ipNext.Y - pt.Y) -
+                                    (ipNext.X - pt.X)*(ip.Y - pt.Y);
+                            if (Math.Abs(d) < double.Epsilon) return null;
+                            else if ((d > 0) == (ipNext.Y > ip.Y)) result = !result;
+                        }
+                    }
+                    else
+                    {
+                        if (ipNext.X > pt.X)
+                        {
+                            var d = (ip.X - pt.X)*(ipNext.Y - pt.Y) -
+                                    (ipNext.X - pt.X)*(ip.Y - pt.Y);
+                            if (Math.Abs(d) < double.Epsilon) return null;
+                            else if ((d > 0) == (ipNext.Y > ip.Y)) result = !result;
+                        }
+                    }
+                }
+                ip = ipNext;
+            } while (!finished);
+            return result;
+        }
+
+        
+
 
         public static List<List<Point3D>> ClipPaths(this List<List<Point3D>> p1, List<List<Point3D>> p2, ClipType ct, double z, double eps)
         {
             if (p1 != null && p2 != null)
             {
-                var xpaths1 = p1.ChangePointUnits(eps);
-                var xpaths2 = p2.ChangePointUnits(eps);
+                var xpaths1 = p1.ChangePointUnits();
+                var xpaths2 = p2.ChangePointUnits();
 
                 var clipper = new Clipper();
 
-                clipper.AddPaths(xpaths1, PolyType.Subject, true);
-                clipper.AddPaths(xpaths2, PolyType.Clip, true);
+                clipper.AddPaths(xpaths1, PolyType.Subject);
+                clipper.AddPaths(xpaths2, PolyType.Clip);
 
-                var solutions = new List<List<IntPoint>>();
+                var solutions = new List<List<Point>>();
 
                 solutions = !clipper.Execute(ct, solutions) ? xpaths2 : solutions.Where(x => x.Count > 3).ToList();
 
 
-                return solutions.ChangePointUnits(z, eps);
+                return solutions.ChangePointUnits(z);
 
             }
             else
             {
-                return p1 ?? p2;
+                var res = p1 ?? p2;
+
+                if (res != null)
+                {
+                    res = res.ChangePointUnits().ChangePointUnits(z);
+                }
+
+                return res;
             }
 
 
@@ -85,8 +158,18 @@ namespace Route3D.Helpers
             return des.Select(x => x.Value).ToList();
         }
 
+        public static List<List<Point3D>> FixPointPaths(this List<List<Point3D>> paths)
+        {
+            foreach (var path in paths.Where(x => x.Count > 0 && x[0] != x[x.Count - 1]))
+            {
+                path.Add(path[path.Count - 1]);
+                path.Add(path[0]);
+            }
 
-        public static List<List<int>> CloseMergePaths(this List<List<int>> paths, Point3DCollection poss, double eps)
+            return paths;
+        }
+
+        public static List<List<int>> FixMergeIndexPaths(this List<List<int>> paths, Point3DCollection poss, double eps)
         {
             List<List<int>> pathsnc;
 
@@ -98,7 +181,7 @@ namespace Route3D.Helpers
             {
                 var ia = new Int32Collection(pathsnc.Select(x => new[] { x.First(), x.Last() }).SelectMany(x => x));
 
-                var dem = ia.JoinCloseIndices(poss, eps);
+                var dem = ia.JoinNearIndices(poss, eps);
                 dem = dem.Union(dem.Select(x => new KeyValuePair<int, int>(x.Value, x.Key))).ToDictionary(x => x.Key, x => x.Value);
 
                 if (dem.Count > 0)
@@ -189,16 +272,23 @@ namespace Route3D.Helpers
                 }
             }
 
-            return paths.ToList();
+
+            foreach (var path in paths.Where(x => x.Count > 0 && x[0] != x[x.Count - 1]))
+            {
+                path.Add(path[path.Count - 1]);
+                path.Add(path[0]);
+            }
+
+            return paths;
         }
 
 
-        public static Dictionary<int, int> JoinCloseIndices(this MeshGeometry3D geometry, double eps)
+        public static Dictionary<int, int> JoinNearIndices(this MeshGeometry3D geometry, double eps)
         {
-            return JoinCloseIndices(geometry.TriangleIndices, geometry.Positions, eps);
+            return JoinNearIndices(geometry.TriangleIndices, geometry.Positions, eps);
         }
 
-        public static Dictionary<int, int> JoinCloseIndices(this Int32Collection indices, Point3DCollection positions, double eps)
+        public static Dictionary<int, int> JoinNearIndices(this Int32Collection indices, Point3DCollection positions, double eps)
         {
             var points = indices.Distinct().OrderBy(x=>x).ToList();
 
@@ -259,7 +349,6 @@ namespace Route3D.Helpers
         {
             return p.DistanceTo(ZeroPoint);
         }
-
 
         public static IList<Point3D> GenerateGridLines(Size3D size, Point3D? centerz = null)
         {
