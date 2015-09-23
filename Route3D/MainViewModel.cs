@@ -130,10 +130,11 @@ namespace Route3D
                     var step = Math.Sign(bounds.Size.Z)*1;
 
                     List<List<Point3D>> xpaths = null;
+                    //int cnt = 0;
 
                     for (double i = bounds.Location.Z + bounds.Size.Z; i >= bounds.Location.Z; i -= step)
                     {
-
+                        
                         var modl = MeshGeometryHelper.Cut(MeshGeometryHelper.Cut((MeshGeometry3D)geom.Geometry, new Point3D(0, 0, i - step), new Vector3D(0, 0, 1)), new Point3D(0, 0, i), new Vector3D(0, 0, -1));
 
                         modl.JoinNearIndices(EPSILON);
@@ -194,27 +195,27 @@ namespace Route3D
                         }
 
 
+                        var paths1 = paths.FixMergeIndexPaths(modl.Positions, EPSILON).Select(x => x.Select(y => modl.Positions[y]).ToList()).ToList();
 
-                        
+                        var hstep = 4;
 
-                        List<List<Point3D>> paths1 = paths.FixMergeIndexPaths(modl.Positions, EPSILON).Select(x=>x.Select(y=>modl.Positions[y]).ToList()).ToList();
+                        xpaths = xpaths.ClipPaths(paths1, ClipType.Union, i, EPSILON).RemoveSmallPolygons(1, hstep * 3, hstep).FixPointPaths();
 
-                        xpaths = xpaths.ClipPaths(paths1, ClipType.Union, i, EPSILON).FixPointPaths();
 
-                        var mb = new MeshBuilder();
 
+                        //int scnt = 0;
 
                         foreach (var path in xpaths)
                         {
+                            var mb = new MeshBuilder();
 
                             mb.AddTube(path, 1, 8, true);
+
+                            model3DGroup.Children.Add(new GeometryModel3D { Geometry = mb.ToMesh(true), Material = MaterialHelper.CreateMaterial(GeometryHelper.GoodColors[rand.Next(GeometryHelper.GoodColors.Count - 1)]), Transform = new TranslateTransform3D(0,0,/*scnt++*/0)});
+
                         }
 
-
-                        model3DGroup.Children.Add(new GeometryModel3D { Geometry = mb.ToMesh(true), Material = MaterialHelper.CreateMaterial(GeometryHelper.GoodColors[rand.Next(GeometryHelper.GoodColors.Count - 1)]) });
-
-
-                      
+                        
                     }
 
                                    

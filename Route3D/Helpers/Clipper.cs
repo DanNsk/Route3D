@@ -115,17 +115,6 @@ namespace Route3D.Helpers
         public  Point Pt;
     };
 
-    public class MyIntersectNodeSort : IComparer<IntersectNode>
-    {
-        public int Compare(IntersectNode node1, IntersectNode node2)
-        {
-            var i = node2.Pt.Y - node1.Pt.Y;
-            if (i > 0) return 1;
-            else if (i < 0) return -1;
-            else return 0;
-        }
-    }
-
     public class LocalMinima
     {
         public  TEdge LeftBound;
@@ -143,7 +132,7 @@ namespace Route3D.Helpers
     public class OutRec
     {
         public  OutPt BottomPt;
-        public  OutRec FirstLeft; //see comments in clipper.pas
+        public  OutRec FirstLeft;
         public  int Idx;
         public  bool IsHole;
         public  bool IsOpen;
@@ -701,6 +690,19 @@ namespace Route3D.Helpers
         private Scanbeam m_Scanbeam;
         private TEdge m_SortedEdges;
         private PolyFillType m_SubjFillType;
+
+
+        private class MyIntersectNodeSort : IComparer<IntersectNode>
+        {
+            public int Compare(IntersectNode node1, IntersectNode node2)
+            {
+                var i = node2.Pt.Y - node1.Pt.Y;
+                if (i > 0) return 1;
+                else if (i < 0) return -1;
+                else return 0;
+            }
+        }
+
 
         public Clipper(bool ioReverseSolution = false, bool ioStrictlySimple = false, bool ioPreserveCollinear = false)
         {
@@ -2357,17 +2359,7 @@ namespace Route3D.Helpers
                    (inode.Edge1.PrevInSEL == inode.Edge2);
         }
 
-        //------------------------------------------------------------------------------
-
-        private static int IntersectNodeSort(IntersectNode node1, IntersectNode node2)
-        {
-            //the following typecast is safe because the differences in Pt.Y will
-            //be limited to the height of the scanbeam.
-            return (int) (node2.Pt.Y - node1.Pt.Y);
-        }
-
-        //------------------------------------------------------------------------------
-
+       
         private bool FixupIntersectionOrder()
         {
             //pre-condition: intersections are sorted bottom-most first.

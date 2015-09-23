@@ -14,6 +14,7 @@ namespace Route3D.Helpers
         public static readonly IList<Color> GoodColors = typeof(Colors).GetProperties(BindingFlags.Static | BindingFlags.Public).Where(p => p.PropertyType == typeof(Color)).Select(p => (Color)p.GetValue(null)).Where(c => !c.Equals(Colors.White) && !c.Equals(Colors.Transparent)).ToList();
 
 
+
         public static List<List<Point>> ChangePointUnits(this List<List<Point3D>> points)
         {
             return points == null ? null : points.Select(x => x.Select(y => new Point(y.X, y.Y)).ToList()).ToList();
@@ -24,7 +25,118 @@ namespace Route3D.Helpers
             return points == null ? null : points.Select(x => x.Select(y => new Point3D(y.X, y.Y, z)).ToList()).ToList();
         }
 
-        //----------------------------------------------------------------------
+
+        public static List<List<Point3D>> RemoveSmallPolygons(this List<List<Point3D>> points, double minArea, double minPer, double minSide)
+        {
+            var areas = points.Select(x => x.Area()).ToList();
+            var perimeters = points.Select(x => x.Area()).ToList();
+
+            var minsides = areas.Select((x, i) => {
+                var p = perimeters[i];
+                var d = p*p - 16 * x;
+
+                if (d < 0)
+                {
+                    if (p > 0)
+                        return x/(p/2);
+
+                    return double.NaN;
+                }
+                return (p - Math.Sqrt(d))/4;
+            }).ToList();
+
+            // area = a*b => a = area / b ; perimeter = 2a + 2b => perimeter = 2(area / b) + 2b; 2b*b - perimetr*b + 2area=0
+            // D = perimetr * perimetr - 4 * 2 * 2 * area
+
+            return points.Where((x, i) => areas[i] > minArea && perimeters[i] > minPer && (!double.IsNaN(minsides[i]) || minsides[i] > minSide)).ToList();
+        }
+
+
+        public static double DistanceTo(this Point p1, Point p2)
+        {
+            return Math.Sqrt((p1.X - p2.X) * (p1.X - p2.X) + (p1.Y - p2.Y) * (p1.Y - p2.Y));
+        }
+
+
+        public static double Area(this List<Point3D> points)
+        {
+
+            int nPts = points.Count;
+
+            var a = default(Point3D);
+
+            for (int i = 0; i < nPts; ++i)
+            {
+                var j = (i + 1) % nPts;
+                var c =  Cross(points[i], points[j]);
+                a.X += c.X;
+                a.Y += c.Y;
+                a.Z += c.Z;
+            }
+
+            a.X = a.X / 2;
+            a.Y = a.Y / 2;
+            a.Z = a.Z / 2;
+
+            return a.DistanceTo(default(Point3D));
+        }
+
+
+        public static double Perimeter(this List<Point3D> points)
+        {
+            int nPts = points.Count;
+
+            var a = 0.0;
+
+            for (int i = 0; i < nPts; ++i)
+            {
+                var j = (i + 1) % nPts;
+                a += points[i].DistanceTo(points[j]);
+                
+            }
+
+            return a;
+        }
+
+        public static Point3D Cross(this Point3D v0, Point3D v1)
+        {
+            return new Point3D(v0.Y * v1.Z - v0.Z * v1.Y,
+                v0.Z * v1.X - v0.X * v1.Z,
+                v0.X * v1.Y - v0.Y * v1.X);
+        }
+
+        public static double Area(this List<Point> polygon)
+        {
+            
+            double area = 0;
+
+            for (var i = 0; i < polygon.Count; i++)
+            {
+                var j = (i + 1) % polygon.Count;
+
+                area += polygon[i].X * polygon[j].Y;
+                area -= polygon[i].Y * polygon[j].X;
+            }
+
+           
+            return Math.Abs(area/2);
+        }
+
+        public static double Perimeter(this List<Point> polygon)
+        {
+
+            double perimeter = 0;
+
+            for (var i = 0; i < polygon.Count; i++)
+            {
+                var j = (i + 1) % polygon.Count;
+
+                perimeter += polygon[i].DistanceTo(polygon[j]);
+            }
+
+
+            return perimeter;
+        }
 
         public static bool? IsPointInPolygon(this Point pt, IEnumerable<Point> pathen)
         {
