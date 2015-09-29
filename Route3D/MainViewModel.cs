@@ -186,9 +186,9 @@ namespace Route3D
 
 
                     int j = 1;
-                    int nonFixed;
                     do
                     {
+                        int nonFixed;
                         var xpathsn = co.Execute(DRILL_STEP * j).ChangePointUnits(i).FixBounds(bounds, DRILL_STEP * 3, out nonFixed);
                         if (nonFixed == 0)
                             break;
@@ -209,6 +209,8 @@ namespace Route3D
 
                         model3DGroup.Children.Add(new GeometryModel3D {Geometry = mb.ToMesh(true), Material = MaterialHelper.CreateMaterial(GeometryHelper.GoodColors[rand.Next(GeometryHelper.GoodColors.Count - 1)]), Transform = new TranslateTransform3D(0, 0, /*scnt++*/0)});
                     }
+
+                    break;
                 }
 
 

@@ -13,6 +13,22 @@ namespace Route3D.Helpers
     {
         public static readonly IList<Color> GoodColors = typeof(Colors).GetProperties(BindingFlags.Static | BindingFlags.Public).Where(p => p.PropertyType == typeof(Color)).Select(p => (Color)p.GetValue(null)).Where(c => !c.Equals(Colors.White) && !c.Equals(Colors.Transparent)).ToList();
 
+        public static Vector GetNormalWith(this Point pt1, Point pt2)
+        {
+            var dx = (pt2.X - pt1.X);
+            var dy = (pt2.Y - pt1.Y);
+
+            if ((Math.Abs(dx) < double.Epsilon) && (Math.Abs(dy) < double.Epsilon))
+                return new Vector(0, 0);
+
+            var f = 1.0 / Math.Sqrt(dx * dx + dy * dy);
+            dx *= f;
+            dy *= f;
+
+            return new Vector(dy, -dx);
+        }
+
+
         public static List<List<Point3D>> FixBounds(this List<List<Point3D>> paths, Rect3D rect, double extra, out int nonFixed)
         {
             rect = new Rect3D(rect.X - extra, rect.Y - extra, rect.Z - extra, rect.SizeX + extra * 2, rect.SizeY + extra * 2, rect.SizeZ + extra * 2);
