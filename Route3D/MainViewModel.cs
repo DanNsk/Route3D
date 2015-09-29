@@ -1,17 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Windows;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Media.Media3D;
-using System.Xml.XPath;
 using HelixToolkit.Wpf;
 using Route3D.Helpers;
 using Route3D.Properties;
@@ -101,7 +94,8 @@ namespace Route3D
             }
         }
 
-        public const double EPSILON = 1e-3; 
+        public const double EPSILON = 1e-3;
+        public const double DRILL_STEP = 25.4/8/2;
 
         private Model3DGroup ImportFile(string model3DPath)
         {
@@ -109,117 +103,112 @@ namespace Route3D
 
             if (res != null)
             {
+                res = res.JoinModelsToOne();
                 var model3DGroup = new Model3DGroup();
 
-                foreach (var geom in res.Children.OfType<GeometryModel3D>())
-                {
-                    if (geom.Geometry is MeshGeometry3D)
-                        model3DGroup.Children.Add(geom);
-                }
-                res = model3DGroup;
 
                 var bounds = res.Bounds;
 
-                model3DGroup = new Model3DGroup();
+                var geom = res.Children.OfType<GeometryModel3D>().First().Geometry as MeshGeometry3D;
 
                 var rand = new Random();
+                var step = Math.Sign(bounds.Size.Z)*1;
 
+                List<List<Point3D>> xpaths = null;
 
-                foreach (var geom in res.Children.OfType<GeometryModel3D>())
+                for (double i = bounds.Location.Z + bounds.Size.Z; i >= bounds.Location.Z; i -= step)
                 {
-                    var step = Math.Sign(bounds.Size.Z)*1;
+                    var modl = geom.Slice(new Point3D(0, 0, i - step), new Vector3D(0, 0, step), EPSILON);
+                    
+                    var des = modl.FindBottomContours(EPSILON);
 
-                    List<List<Point3D>> xpaths = null;
-                    //int cnt = 0;
 
-                    for (double i = bounds.Location.Z + bounds.Size.Z; i >= bounds.Location.Z; i -= step)
+                    if (des.Count == 0)
+                        continue;
+
+                    var paths = new List<List<int>>();
+                    var dict = des.Union(des.Select(x => Tuple.Create(x.Item2, x.Item1))).GroupBy(x => x.Item1).ToDictionary(x => x.Key, x => x.Select(y => y.Item2).ToList());
+
+
+                    while (dict.Count > 0)
                     {
-                        
-                        var modl = MeshGeometryHelper.Cut(MeshGeometryHelper.Cut((MeshGeometry3D)geom.Geometry, new Point3D(0, 0, i - step), new Vector3D(0, 0, 1)), new Point3D(0, 0, i), new Vector3D(0, 0, -1));
+                        var fp = dict.Where(x => x.Value.Count() == 1).Union(dict)
+                            .Select(x => Tuple.Create(x.Key, x.Value.First())).FirstOrDefault();
 
-                        modl.JoinNearIndices(EPSILON);
+                        var fpath = new List<int>();
 
-                        var des = modl.FindBottomContours(EPSILON);
+                        paths.Add(fpath);
 
-
-                        if (des.Count == 0)
-                            continue;
-
-                        var paths = new List<List<int>>();
-                        var dict = des.Union(des.Select(x=>Tuple.Create(x.Item2, x.Item1))).GroupBy(x => x.Item1).ToDictionary(x => x.Key, x => x.Select(y => y.Item2).ToList());
+                        var ind = fp.Item1;
 
 
-                        
-
-                        while (dict.Count > 0)
+                        while (dict.ContainsKey(ind))
                         {
-                            var fp = dict.Where(x => x.Value.Count() == 1).Union(dict)
-                                .Select(x => Tuple.Create(x.Key, x.Value.First())).FirstOrDefault();
+                            fpath.Add(ind); //modl.Positions[ind]);
 
-                            var fpath = new List<int>();
+                            var d = dict;
 
-                            paths.Add(fpath);
+                            var tmp = ind;
+                            ind = d[ind].First();
 
-                            var ind = fp.Item1;
-
-
-                            while (dict.ContainsKey(ind))
+                            if (d.ContainsKey(tmp))
                             {
-                                fpath.Add(ind);//modl.Positions[ind]);
+                                d[tmp].Remove(ind);
 
-                                var d = dict;
-
-                                var tmp = ind;
-                                ind = d[ind].First();
-
-                                if (d.ContainsKey(tmp))
-                                {
-                                    d[tmp].Remove(ind);
-
-                                    if (d[tmp].Count == 0)
-                                        d.Remove(tmp);
-                                }
-
-                                if (d.ContainsKey(ind))
-                                {
-                                    d[ind].Remove(tmp);
-
-                                    if (d[ind].Count == 0)
-                                        d.Remove(ind);
-                                }
-
-
-                                fpath.Add(ind);//modl.Positions[ind]);
+                                if (d[tmp].Count == 0)
+                                    d.Remove(tmp);
                             }
 
+                            if (d.ContainsKey(ind))
+                            {
+                                d[ind].Remove(tmp);
+
+                                if (d[ind].Count == 0)
+                                    d.Remove(ind);
+                            }
+
+
+                            fpath.Add(ind); //modl.Positions[ind]);
                         }
-
-
-                        var paths1 = paths.FixMergeIndexPaths(modl.Positions, EPSILON).Select(x => x.Select(y => modl.Positions[y]).ToList()).ToList();
-
-                        var hstep = 4;
-
-                        xpaths = xpaths.ClipPaths(paths1, ClipType.Union, i, EPSILON).RemoveSmallPolygons(1, hstep * 3, hstep).FixPointPaths();
-
-
-
-                        //int scnt = 0;
-
-                        foreach (var path in xpaths)
-                        {
-                            var mb = new MeshBuilder();
-
-                            mb.AddTube(path, 1, 8, true);
-
-                            model3DGroup.Children.Add(new GeometryModel3D { Geometry = mb.ToMesh(true), Material = MaterialHelper.CreateMaterial(GeometryHelper.GoodColors[rand.Next(GeometryHelper.GoodColors.Count - 1)]), Transform = new TranslateTransform3D(0,0,/*scnt++*/0)});
-
-                        }
-
-                        
                     }
 
-                                   
 
+                    var paths1 = paths.FixMergeIndexPaths(modl.Positions, EPSILON).Select(x => x.Select(y => modl.Positions[y]).ToList()).ToList();
+
+                    var hstep = 4;
+
+                    xpaths = xpaths.ClipPaths(paths1, ClipType.Union, i, EPSILON).RemoveSmallPolygons(1, hstep*3, hstep).FixPointPaths();
+
+                    var co = new ClipperOffset();
+                    co.AddPaths(xpaths.ChangePointUnits(), JoinType.Round, EndType.ClosedPolygon);
+
+                    var xpathsres = new List<List<Point3D>>();
+
+
+                    int j = 1;
+                    int nonFixed;
+                    do
+                    {
+                        var xpathsn = co.Execute(DRILL_STEP * j).ChangePointUnits(i).FixBounds(bounds, DRILL_STEP * 3, out nonFixed);
+                        if (nonFixed == 0)
+                            break;
+                        j++;
+                        xpathsres = xpathsres.Union(xpathsn).ToList();
+                    } while (true);
+
+
+
+                    xpathsres.JoinNearPoints(EPSILON);
+
+
+                    foreach (var path in xpathsres)
+                    {
+                        var mb = new MeshBuilder();
+
+                        mb.AddTube(path, 1, 8, true);
+
+                        model3DGroup.Children.Add(new GeometryModel3D {Geometry = mb.ToMesh(true), Material = MaterialHelper.CreateMaterial(GeometryHelper.GoodColors[rand.Next(GeometryHelper.GoodColors.Count - 1)]), Transform = new TranslateTransform3D(0, 0, /*scnt++*/0)});
+                    }
                 }
 
 
@@ -227,8 +216,9 @@ namespace Route3D
             }
 
 
-            
             return res;
         }
+
+        
     }
 }

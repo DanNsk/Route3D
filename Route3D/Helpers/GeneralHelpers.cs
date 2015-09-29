@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Windows.Media.Media3D;
 
 namespace Route3D.Helpers
 {

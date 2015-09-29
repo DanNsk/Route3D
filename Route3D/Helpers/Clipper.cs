@@ -2617,13 +2617,6 @@ namespace Route3D.Helpers
 
         //------------------------------------------------------------------------------
 
-        public static bool Orientation(List<Point> poly)
-        {
-            return Area(poly) >= 0;
-        }
-
-        //------------------------------------------------------------------------------
-
         private int PointCount(OutPt pts)
         {
             if (pts == null) return 0;
@@ -3190,23 +3183,7 @@ namespace Route3D.Helpers
             }
         }
 
-        //------------------------------------------------------------------------------
-
-        public static double Area(List<Point> poly)
-        {
-            var cnt = poly.Count;
-            if (cnt < 3) return 0;
-            double a = 0;
-            for (int i = 0, j = cnt - 1; i < cnt; ++i)
-            {
-                a += (poly[j].X + poly[i].X)*(poly[j].Y - poly[i].Y);
-                j = i;
-            }
-            return -a*0.5;
-        }
-
-        //------------------------------------------------------------------------------
-
+   
         private double Area(OutRec outRec)
         {
             var op = outRec.Pts;
@@ -3385,23 +3362,20 @@ namespace Route3D.Helpers
             var polyCnt = pattern.Count;
             var pathCnt = path.Count;
             var result = new List<List<Point>>(pathCnt);
-            if (IsSum)
-                for (var i = 0; i < pathCnt; i++)
-                {
-                    var p = new List<Point>(polyCnt);
-                    p.AddRange(pattern.Select(ip => new Point(path[i].X + ip.X, path[i].Y + ip.Y)));
-                    result.Add(p);
-                }
-            else
-                for (var i = 0; i < pathCnt; i++)
-                {
-                    var p = new List<Point>(polyCnt);
-                    p.AddRange(pattern.Select(ip => new Point(path[i].X - ip.X, path[i].Y - ip.Y)));
-                    result.Add(p);
-                }
+
+            var mul = (IsSum ? 1.0 : -1.0);
+
+            for (var i = 0; i < pathCnt; i++)
+            {
+                var p = new List<Point>(polyCnt);
+                p.AddRange(pattern.Select(ip => new Point(path[i].X + mul * ip.X, path[i].Y + mul * ip.Y)));
+                result.Add(p);
+            }
 
             var quads = new List<List<Point>>((pathCnt + delta)*(polyCnt + 1));
+
             for (var i = 0; i < pathCnt - 1 + delta; i++)
+            {
                 for (var j = 0; j < polyCnt; j++)
                 {
                     var quad = new List<Point>
@@ -3411,9 +3385,12 @@ namespace Route3D.Helpers
                         result[(i + 1)%pathCnt][(j + 1)%polyCnt],
                         result[i%pathCnt][(j + 1)%polyCnt]
                     };
-                    if (!Orientation(quad)) quad.Reverse();
+                    if (!quad.Orientation())
+                        quad.Reverse();
+
                     quads.Add(quad);
                 }
+            }
             return quads;
         }
 

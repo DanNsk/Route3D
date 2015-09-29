@@ -13,6 +13,154 @@ namespace Route3D.Helpers
     {
         public static readonly IList<Color> GoodColors = typeof(Colors).GetProperties(BindingFlags.Static | BindingFlags.Public).Where(p => p.PropertyType == typeof(Color)).Select(p => (Color)p.GetValue(null)).Where(c => !c.Equals(Colors.White) && !c.Equals(Colors.Transparent)).ToList();
 
+        public static List<List<Point3D>> FixBounds(this List<List<Point3D>> paths, Rect3D rect, double extra, out int nonFixed)
+        {
+            rect = new Rect3D(rect.X - extra, rect.Y - extra, rect.Z - extra, rect.SizeX + extra * 2, rect.SizeY + extra * 2, rect.SizeZ + extra * 2);
+
+            nonFixed = 0;
+
+            foreach (var path in paths)
+            {
+                nonFixed += path.Count;
+                var j = path.Count - 1;
+                for (int i = 0; i < path.Count; i++)
+                {
+                    var p = path[i];
+
+                    if (!p.IsInside(rect, 0.0))
+                    {
+                        var x = p.X;
+                        var y = p.Y;
+                        var z = p.Z;
+
+
+                        if (x < rect.X)
+                        {
+                            x = rect.X;
+                        }
+                        else if (x > rect.X + rect.SizeX)
+                        {
+                            x = rect.X + rect.SizeX;
+                        }
+
+                        if (y < rect.Y)
+                        {
+                            y = rect.Y;
+                        }
+                        else if (y > rect.Y + rect.SizeY)
+                        {
+                            y = rect.Y + rect.SizeY;
+                        }
+
+                        if (z < rect.Z)
+                        {
+                            z = rect.Z;
+                        }
+                        else if (z > rect.Z + rect.SizeZ)
+                        {
+                            z = rect.Z + rect.SizeZ;
+                        }
+
+                        path[i] = new Point3D(x,y,z);
+
+
+                        nonFixed--;
+                    }
+                }
+                    
+            }
+
+            return paths;
+        }
+
+        public static bool IsInside(this Point3D point, Rect3D rect, double extra)
+        {
+            rect = new Rect3D(rect.X - extra, rect.Y - extra, rect.Z - extra, rect.SizeX + extra * 2, rect.SizeY + extra * 2, rect.SizeZ + extra * 2);
+
+            return point.X >= rect.X && point.X <= rect.X + rect.SizeX &&
+                   point.Y >= rect.Y && point.Y <= rect.Y + rect.SizeY &&
+                   point.Z >= rect.Z && point.Z <= rect.Z + rect.SizeZ;
+        }
+
+        public static MeshGeometry3D Slice(this MeshGeometry3D geom, Point3D start, Vector3D step, double? epsilon = null)
+        {
+            var res = MeshGeometryHelper.Cut(MeshGeometryHelper.Cut(geom, start, step), start + step, -step);
+
+            if (epsilon.HasValue)
+                res.JoinNearIndices(epsilon.Value);
+
+            return res;
+        }
+
+        public static Model3DGroup JoinModelsToOne(this Model3DGroup res, Material mat = null, Transform3D transf = null)
+        {
+            var geometry = new MeshGeometry3D();
+
+
+            foreach (var mgeom in res.Children.OfType<GeometryModel3D>()
+                .Select(geom => geom.Geometry as MeshGeometry3D)
+                .Where(mgeom => mgeom != null))
+            {
+                var cnt = geometry.Positions.Count;
+
+                foreach (var pos in mgeom.Positions)
+                {
+                    geometry.Positions.Add(pos);
+                }
+
+                foreach (var nor in mgeom.Normals)
+                {
+                    geometry.Normals.Add(nor);
+                }
+
+                foreach (var tex in mgeom.TextureCoordinates)
+                {
+                    geometry.TextureCoordinates.Add(tex);
+                }
+
+                foreach (var index in mgeom.TriangleIndices)
+                {
+                    geometry.TriangleIndices.Add(cnt + index);
+                }
+            }
+
+
+            var model3DGroup = new Model3DGroup();
+
+            model3DGroup.Children.Add(new GeometryModel3D { Geometry = geometry, Material = mat, Transform = transf });
+
+            return model3DGroup;
+        }
+
+        public static Rect GetBounds(this List<List<Point>> paths)
+        {
+            int i = 0, cnt = paths.Count;
+            while (i < cnt && paths[i].Count == 0) i++;
+
+            if (i == cnt)
+                return new Rect(0, 0, 0, 0);
+
+            var l = paths[i][0].X;
+            var r = paths[i][0].X;
+            var t = paths[i][0].Y;
+            var b = paths[i][0].Y;
+
+
+            for (; i < cnt; i++)
+            {
+                for (int j = 0; j < paths[i].Count; j++)
+                {
+
+
+                    if (paths[i][j].X < l) l = paths[i][j].X;
+                    else if (paths[i][j].X > r) r = paths[i][j].X;
+                    if (paths[i][j].Y < t) t = paths[i][j].Y;
+                    else if (paths[i][j].Y > b) b = paths[i][j].Y;
+                }
+            }
+
+            return new Rect(new Point(l, t), new Point(r, b));
+        }
 
 
         public static List<List<Point>> ChangePointUnits(this List<List<Point3D>> points)
@@ -40,7 +188,7 @@ namespace Route3D.Helpers
                     if (p > 0)
                         return x/(p/2);
 
-                    return double.NaN;
+                    return Double.NaN;
                 }
                 return (p - Math.Sqrt(d))/4;
             }).ToList();
@@ -48,7 +196,7 @@ namespace Route3D.Helpers
             // area = a*b => a = area / b ; perimeter = 2a + 2b => perimeter = 2(area / b) + 2b; 2b*b - perimetr*b + 2area=0
             // D = perimetr * perimetr - 4 * 2 * 2 * area
 
-            return points.Where((x, i) => areas[i] > minArea && perimeters[i] > minPer && (!double.IsNaN(minsides[i]) || minsides[i] > minSide)).ToList();
+            return points.Where((x, i) => areas[i] > minArea && perimeters[i] > minPer && (!Double.IsNaN(minsides[i]) || minsides[i] > minSide)).ToList();
         }
 
 
@@ -105,21 +253,45 @@ namespace Route3D.Helpers
                 v0.X * v1.Y - v0.Y * v1.X);
         }
 
-        public static double Area(this List<Point> polygon)
+        public static bool Orientation(this IEnumerable<Point> pathen)
+        {
+            return AreaNonAbs(pathen) >= 0;
+        }
+
+        public static double AreaNonAbs(this IEnumerable<Point> pathen)
         {
             
             double area = 0;
 
-            for (var i = 0; i < polygon.Count; i++)
-            {
-                var j = (i + 1) % polygon.Count;
+            var path = pathen.GetEnumerator();
 
-                area += polygon[i].X * polygon[j].Y;
-                area -= polygon[i].Y * polygon[j].X;
-            }
+            // ReSharper disable once ConditionIsAlwaysTrueOrFalse
+            if (path == null || !path.MoveNext())
+                return 0;
+
+            var first = path.Current;
+            var ip = first;
+
+            bool finished;
+
+            do
+            {
+                finished = !path.MoveNext();
+
+                var ipNext = (finished ? first : path.Current);
+
+                area += (ip.X + ipNext.X) * (ip.Y - ipNext.Y);
+
+                ip = ipNext;
+            } while (!finished);
 
            
-            return Math.Abs(area/2);
+            return -(area/2);
+        }
+
+        public static double Area(this IEnumerable<Point> polygon)
+        {
+            return Math.Abs(AreaNonAbs(polygon));
         }
 
         public static double Perimeter(this List<Point> polygon)
@@ -162,9 +334,9 @@ namespace Route3D.Helpers
                 finished = !path.MoveNext();
 
                 var ipNext = (finished ? first : path.Current);
-                if (Math.Abs(ipNext.Y - pt.Y) < double.Epsilon)
+                if (Math.Abs(ipNext.Y - pt.Y) < Double.Epsilon)
                 {
-                    if ((Math.Abs(ipNext.X - pt.X) < double.Epsilon) || (Math.Abs(ip.Y - pt.Y) < double.Epsilon &&
+                    if ((Math.Abs(ipNext.X - pt.X) < Double.Epsilon) || (Math.Abs(ip.Y - pt.Y) < Double.Epsilon &&
                                                                          ((ipNext.X > pt.X) == (ip.X < pt.X)))) return null;
                 }
                 if ((ip.Y < pt.Y) != (ipNext.Y < pt.Y))
@@ -176,7 +348,7 @@ namespace Route3D.Helpers
                         {
                             var d = (ip.X - pt.X)*(ipNext.Y - pt.Y) -
                                     (ipNext.X - pt.X)*(ip.Y - pt.Y);
-                            if (Math.Abs(d) < double.Epsilon) return null;
+                            if (Math.Abs(d) < Double.Epsilon) return null;
                             else if ((d > 0) == (ipNext.Y > ip.Y)) result = !result;
                         }
                     }
@@ -186,7 +358,7 @@ namespace Route3D.Helpers
                         {
                             var d = (ip.X - pt.X)*(ipNext.Y - pt.Y) -
                                     (ipNext.X - pt.X)*(ip.Y - pt.Y);
-                            if (Math.Abs(d) < double.Epsilon) return null;
+                            if (Math.Abs(d) < Double.Epsilon) return null;
                             else if ((d > 0) == (ipNext.Y > ip.Y)) result = !result;
                         }
                     }
@@ -237,6 +409,9 @@ namespace Route3D.Helpers
 
         public static IList<Tuple<int, int>> FindBottomContours(this MeshGeometry3D segments, double eps)
         {
+            if (segments.TriangleIndices.Count == 0)
+                return new List<Tuple<int, int>>();
+
             var i = segments.TriangleIndices.Select(cz => segments.Positions[cz].Z).Min();
 
             var m = segments.TriangleIndices.GroupByCount(3).Select(z => z.Select(zi => new { ind = zi, p = segments.Positions[zi], hp = Math.Abs(segments.Positions[zi].Z - i) < eps ? 1 : 0 }).ToList()).Where(z => z.Sum(zi => zi.hp) > 1).ToArray();
@@ -395,6 +570,33 @@ namespace Route3D.Helpers
         }
 
 
+        public static void JoinNearPoints(this List<List<Point3D>>  paths, double eps)
+        {
+            foreach (var path in paths)
+            {
+                if (paths.Count > 2)
+                {
+                    for (int i = 0; i < path.Count; )
+                    {
+                        for (int j = i + 1; j <= path.Count; j++)
+                        {
+                            if (path[i].DistanceTo(path[j % path.Count]) > eps)
+                            {
+                                i = j;
+                                break;
+                            }
+
+
+                            path.RemoveAt(j % path.Count);
+                            j--;
+                        }
+                    }
+                }
+
+            }
+        }
+
+
         public static Dictionary<int, int> JoinNearIndices(this MeshGeometry3D geometry, double eps)
         {
             return JoinNearIndices(geometry.TriangleIndices, geometry.Positions, eps);
@@ -402,6 +604,9 @@ namespace Route3D.Helpers
 
         public static Dictionary<int, int> JoinNearIndices(this Int32Collection indices, Point3DCollection positions, double eps)
         {
+            if (indices.Count == 0)
+                return new Dictionary<int, int>();
+
             var points = indices.Distinct().OrderBy(x=>x).ToList();
 
             var rnd = new Random();
@@ -529,7 +734,7 @@ namespace Route3D.Helpers
                           Vector3D rd,  //Ray direction
                            out Vector3D outp)
         {
-            outp = new Vector3D(double.NaN, double.NaN, double.NaN);
+            outp = new Vector3D(Double.NaN, Double.NaN, Double.NaN);
 
             //Find vectors for two edges sharing V1
             var e1 = p2 - p1;
@@ -539,7 +744,7 @@ namespace Route3D.Helpers
             //if determinant is near zero, ray lies in plane of triangle
             var det = Vector3D.DotProduct(e1, p);
             //NOT CULLING
-            if (Math.Abs(det) < double.Epsilon)
+            if (Math.Abs(det) < Double.Epsilon)
                 return false;
 
             var invDet = 1.0 / det;
