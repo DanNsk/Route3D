@@ -33,6 +33,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 
 namespace Route3D.Helpers
@@ -40,18 +41,16 @@ namespace Route3D.Helpers
     public class PolyNode
     {
         private readonly List<Point> contour = new List<Point>();
-        private readonly List<PolyNode> сhilds = new List<PolyNode>();
-        private int index;
+
         public EndType EndType { get; set; }
         public JoinType JoinType { get; set; }
-        public bool IsOpen { get; set; }
 
-        public PolyNode Parent { get; set; }
-
-
-        public int ChildCount
+        public bool IsOpen 
         {
-            get { return сhilds.Count; }
+            get 
+            {
+                return !(EndType == EndType.ClosedPolygon || EndType == EndType.ClosedLine);
+            }
         }
 
         public List<Point> Contour
@@ -59,50 +58,7 @@ namespace Route3D.Helpers
             get { return contour; }
         }
 
-        public List<PolyNode> Childs
-        {
-            get { return сhilds; }
-        }
-
-
-        public bool IsHole
-        {
-            get
-            {
-                var result = true;
-                var node = Parent;
-                while (node != null)
-                {
-                    result = !result;
-                    node = node.Parent;
-                }
-
-                return result;
-            }
-        }
-
-        public void AddChild(PolyNode child)
-        {
-            var cnt = сhilds.Count;
-            сhilds.Add(child);
-            child.Parent = this;
-            child.index = cnt;
-        }
-
-        public PolyNode GetNext()
-        {
-            return сhilds.Count > 0 ? сhilds[0] : GetNextSiblingUp();
-        }
-
-        private PolyNode GetNextSiblingUp()
-        {
-            if (Parent == null)
-                return null;
-            else if (index == Parent.сhilds.Count - 1)
-                return Parent.GetNextSiblingUp();
-            else
-                return Parent.сhilds[index + 1];
-        }
+        public int Level { get; set; }
     }
 
 
@@ -111,14 +67,13 @@ namespace Route3D.Helpers
         private const double TWO_PI = Math.PI * 2;
         private const double DEF_ARC_TOLERANCE = 0.025;
         private readonly List<Vector> normals = new List<Vector>();
-        private readonly PolyNode polyNodes = new PolyNode();
+        private readonly List<PolyNode> polyNodes = new List<PolyNode>();
         private double delta, sinA, sin, cos;
         private List<Point> destPoly;
         private List<Point> srcPoly;
 
 
         private List<List<Point>> destPolys;
-        private Point lowest;
         private double miterLim, stepsPerRad;
 
         public ClipperOffset(
@@ -126,7 +81,8 @@ namespace Route3D.Helpers
         {
             MiterLimit = miterLimit;
             ArcTolerance = arcTolerance;
-            lowest.X = -1;
+            
+            Clear();
         }
 
         public double ArcTolerance { get; set; }
@@ -135,20 +91,20 @@ namespace Route3D.Helpers
 
         public void Clear()
         {
-            polyNodes.Childs.Clear();
-            lowest.X = -1;
+            polyNodes.Clear();
         }
 
         //------------------------------------------------------------------------------
 
-        public void AddPath(List<Point> path, JoinType joinType, EndType endType, double eps = double.Epsilon)
+        public void AddPath(IList<Point> path, JoinType joinType, EndType endType, double eps = double.Epsilon)
         {
             var highI = path.Count - 1;
             if (highI < 0) return;
             var newNode = new PolyNode
             {
                 JoinType = joinType,
-                EndType = endType
+                EndType = endType,
+                Level = 0
             };
 
             //strip duplicate points from path and also get index to the lowest point ...
@@ -160,43 +116,25 @@ namespace Route3D.Helpers
                 }
             }
 
-            newNode.Contour.Capacity = highI + 1;
-            newNode.Contour.Add(path[0]);
-            int j = 0, k = 0;
+            var ctr = newNode.Contour;
+
+            ctr.Capacity = highI + 1;
+            ctr.Add(path[0]);
+            
 
             for (var i = 1; i <= highI; i++)
             {
-                if (newNode.Contour[j].DistanceTo(path[i]) > eps)
+                if (ctr[ctr.Count - 1].DistanceTo(path[i]) > eps)
                 {
-                    j++;
-                    newNode.Contour.Add(path[i]);
-
-                    if (path[i].Y > newNode.Contour[k].Y || (path[i].Y <= newNode.Contour[k].Y && path[i].X < newNode.Contour[k].X))
-                    {
-                        k = j;
-                    }
+                    ctr.Add(path[i]);
                 }
             }
 
-            if (endType == EndType.ClosedPolygon && j < 2)
+            if (endType == EndType.ClosedPolygon && ctr.Count < 3)
                 return;
 
-            polyNodes.AddChild(newNode);
+            polyNodes.Add(newNode);
 
-            //if this path's lowest pt is lower than all the others then update m_lowest
-            if (endType != EndType.ClosedPolygon) return;
-            if (lowest.X < 0)
-            {
-                lowest = new Point(polyNodes.ChildCount - 1, k);
-            }
-            else
-            {
-                var ip = polyNodes.Childs[(int)lowest.X].Contour[(int)lowest.Y];
-                if (newNode.Contour[k].Y > ip.Y || (newNode.Contour[k].Y < ip.Y && newNode.Contour[k].X < ip.X))
-                {
-                    lowest = new Point(polyNodes.ChildCount - 1, k);
-                }
-            }
         }
 
         //------------------------------------------------------------------------------
@@ -209,35 +147,7 @@ namespace Route3D.Helpers
             }
         }
 
-        //------------------------------------------------------------------------------
-
-        private void FixOrientations()
-        {
-            //fixup orientations of all closed paths if the orientation of the
-            //closed path with the lowermost vertex is wrong ...
-            if (lowest.X >= 0 && !(polyNodes.Childs[(int)lowest.X].Contour).Orientation())
-            {
-                for (var i = 0; i < polyNodes.ChildCount; i++)
-                {
-                    var node = polyNodes.Childs[i];
-                    if (node.EndType == EndType.ClosedPolygon || (node.EndType == EndType.ClosedLine && (node.Contour.Orientation())))
-                        node.Contour.Reverse();
-                }
-            }
-            else
-            {
-                for (var i = 0; i < polyNodes.ChildCount; i++)
-                {
-                    var node = polyNodes.Childs[i];
-                    if (node.EndType == EndType.ClosedLine && !(node.Contour.Orientation()))
-                        node.Contour.Reverse();
-                }
-            }
-        }
-
-        //------------------------------------------------------------------------------
-
-
+       
         //------------------------------------------------------------------------------
 
         private void DoOffset(double deltap, double eps)
@@ -248,10 +158,9 @@ namespace Route3D.Helpers
             //if Zero offset, just copy any CLOSED polygons to m_p and return ...
             if (Math.Abs(deltap) < double.Epsilon)
             {
-                destPolys.Capacity = polyNodes.ChildCount;
-                for (var i = 0; i < polyNodes.ChildCount; i++)
+                destPolys.Capacity = polyNodes.Count;
+                foreach (var node in polyNodes)
                 {
-                    var node = polyNodes.Childs[i];
                     if (node.EndType == EndType.ClosedPolygon)
                         destPolys.Add(node.Contour);
                 }
@@ -276,10 +185,10 @@ namespace Route3D.Helpers
             stepsPerRad = steps / TWO_PI;
             if (deltap < 0.0) sin = -sin;
 
-            destPolys.Capacity = polyNodes.ChildCount * 2;
-            for (var i = 0; i < polyNodes.ChildCount; i++)
+            destPolys.Capacity = polyNodes.Count * 2;
+
+            foreach (var node in polyNodes)
             {
-                var node = polyNodes.Childs[i];
                 srcPoly = node.Contour;
 
                 var len = srcPoly.Count;
@@ -334,87 +243,87 @@ namespace Route3D.Helpers
                 switch (node.EndType)
                 {
                     case EndType.ClosedPolygon:
-                        {
-                            var k = len - 1;
-                            for (var j = 0; j < len; j++)
-                                OffsetPoint(j, ref k, node.JoinType, eps);
-                            destPolys.Add(destPoly);
-                        }
+                    {
+                        var k = len - 1;
+                        for (var j = 0; j < len; j++)
+                            OffsetPoint(j, ref k, node.JoinType, eps);
+                        destPolys.Add(destPoly);
+                    }
                         break;
                     case EndType.ClosedLine:
-                        {
-                            var k = len - 1;
-                            for (var j = 0; j < len; j++)
-                                OffsetPoint(j, ref k, node.JoinType, eps);
-                            destPolys.Add(destPoly);
-                            destPoly = new List<Point>();
-                            //re-build m_normals ...
-                            var n = normals[len - 1];
-                            for (var j = len - 1; j > 0; j--)
-                                normals[j] = new Vector(-normals[j - 1].X, -normals[j - 1].Y);
-                            normals[0] = new Vector(-n.X, -n.Y);
+                    {
+                        var k = len - 1;
+                        for (var j = 0; j < len; j++)
+                            OffsetPoint(j, ref k, node.JoinType, eps);
+                        destPolys.Add(destPoly);
+                        destPoly = new List<Point>();
+                        //re-build m_normals ...
+                        var n = normals[len - 1];
+                        for (var j = len - 1; j > 0; j--)
+                            normals[j] = new Vector(-normals[j - 1].X, -normals[j - 1].Y);
+                        normals[0] = new Vector(-n.X, -n.Y);
 
 
-                            k = 0;
-                            for (var j = len - 1; j >= 0; j--)
-                                OffsetPoint(j, ref k, node.JoinType, eps);
-                            destPolys.Add(destPoly);
-                        }
+                        k = 0;
+                        for (var j = len - 1; j >= 0; j--)
+                            OffsetPoint(j, ref k, node.JoinType, eps);
+                        destPolys.Add(destPoly);
+                    }
                         break;
                     default:
+                    {
+                        var k = 0;
+                        for (var j = 1; j < len - 1; ++j)
+                            OffsetPoint(j, ref k, node.JoinType, eps);
+
+                        Point pt1;
+                        if (node.EndType == EndType.OpenButt)
                         {
-                            var k = 0;
-                            for (var j = 1; j < len - 1; ++j)
-                                OffsetPoint(j, ref k, node.JoinType, eps);
-
-                            Point pt1;
-                            if (node.EndType == EndType.OpenButt)
-                            {
-                                var j = len - 1;
-                                pt1 = new Point((srcPoly[j].X + normals[j].X * deltap), (srcPoly[j].Y + normals[j].Y * deltap));
-                                destPoly.Add(pt1);
-                                pt1 = new Point((srcPoly[j].X - normals[j].X * deltap), (srcPoly[j].Y - normals[j].Y * deltap));
-                                destPoly.Add(pt1);
-                            }
-                            else
-                            {
-                                var j = len - 1;
-                                k = len - 2;
-                                sinA = 0;
-                                normals[j] = new Vector(-normals[j].X, -normals[j].Y);
-                                if (node.EndType == EndType.OpenSquare)
-                                    DoSquare(j, k);
-                                else
-                                    Do(j, k);
-                            }
-
-                            //re-build m_normals ...
-                            for (var j = len - 1; j > 0; j--)
-                                normals[j] = new Vector(-normals[j - 1].X, -normals[j - 1].Y);
-
-                            normals[0] = new Vector(-normals[1].X, -normals[1].Y);
-
-                            k = len - 1;
-                            for (var j = k - 1; j > 0; --j)
-                                OffsetPoint(j, ref k, node.JoinType, eps);
-
-                            if (node.EndType == EndType.OpenButt)
-                            {
-                                pt1 = new Point((srcPoly[0].X - normals[0].X * deltap), (srcPoly[0].Y - normals[0].Y * deltap));
-                                destPoly.Add(pt1);
-                                pt1 = new Point((srcPoly[0].X + normals[0].X * deltap), (srcPoly[0].Y + normals[0].Y * deltap));
-                                destPoly.Add(pt1);
-                            }
-                            else
-                            {
-                                sinA = 0;
-                                if (node.EndType == EndType.OpenSquare)
-                                    DoSquare(0, 1);
-                                else
-                                    Do(0, 1);
-                            }
-                            destPolys.Add(destPoly);
+                            var j = len - 1;
+                            pt1 = new Point((srcPoly[j].X + normals[j].X * deltap), (srcPoly[j].Y + normals[j].Y * deltap));
+                            destPoly.Add(pt1);
+                            pt1 = new Point((srcPoly[j].X - normals[j].X * deltap), (srcPoly[j].Y - normals[j].Y * deltap));
+                            destPoly.Add(pt1);
                         }
+                        else
+                        {
+                            var j = len - 1;
+                            k = len - 2;
+                            sinA = 0;
+                            normals[j] = new Vector(-normals[j].X, -normals[j].Y);
+                            if (node.EndType == EndType.OpenSquare)
+                                DoSquare(j, k);
+                            else
+                                Do(j, k);
+                        }
+
+                        //re-build m_normals ...
+                        for (var j = len - 1; j > 0; j--)
+                            normals[j] = new Vector(-normals[j - 1].X, -normals[j - 1].Y);
+
+                        normals[0] = new Vector(-normals[1].X, -normals[1].Y);
+
+                        k = len - 1;
+                        for (var j = k - 1; j > 0; --j)
+                            OffsetPoint(j, ref k, node.JoinType, eps);
+
+                        if (node.EndType == EndType.OpenButt)
+                        {
+                            pt1 = new Point((srcPoly[0].X - normals[0].X * deltap), (srcPoly[0].Y - normals[0].Y * deltap));
+                            destPoly.Add(pt1);
+                            pt1 = new Point((srcPoly[0].X + normals[0].X * deltap), (srcPoly[0].Y + normals[0].Y * deltap));
+                            destPoly.Add(pt1);
+                        }
+                        else
+                        {
+                            sinA = 0;
+                            if (node.EndType == EndType.OpenSquare)
+                                DoSquare(0, 1);
+                            else
+                                Do(0, 1);
+                        }
+                        destPolys.Add(destPoly);
+                    }
                         break;
                 }
             }
@@ -425,7 +334,7 @@ namespace Route3D.Helpers
         public List<List<Point>> Execute(double deltap, double eps = double.Epsilon)
         {
             var solution = new List<List<Point>>();
-            FixOrientations();
+            FixPerimeters();
             DoOffset(deltap, eps);
             //now clean up 'corners' ...
 
@@ -458,6 +367,19 @@ namespace Route3D.Helpers
             }
 
             return solution;
+        }
+
+        private void FixPerimeters()
+        {
+            foreach (var node in polyNodes)
+            {
+                var shells = polyNodes.Count(x => x != node && node.Contour.IsPolygonInPolygon(x.Contour) == true);
+
+                if (((shells % 2) == 0) != node.Contour.Orientation())
+                {
+                    node.Contour.Reverse();
+                }
+            }
         }
 
         //------------------------------------------------------------------------------

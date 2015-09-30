@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography.X509Certificates;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
@@ -326,6 +327,36 @@ namespace Route3D.Helpers
             return perimeter;
         }
 
+        public static bool? IsPolygonInPolygon(this IEnumerable<Point> pathin, IEnumerable<Point> pathen)
+        {
+            return IsPolygonInPolygon(pathin, pathen, false);
+        }
+
+        public static bool? IsPolygonInPolygon(this IEnumerable<Point> pathin, IEnumerable<Point> pathen, bool strictCheck)
+        {
+            bool? res = null;
+
+            var lst = pathen.ToList();
+
+            foreach (var xv in pathin.Select(pt => pt.IsPointInPolygon(lst)).Where(xv => xv.HasValue))
+            {
+                if (xv.Value)
+                {
+                    res = true;
+
+                    if (!strictCheck)
+                        break;
+                }
+                else
+                {
+                    res = false;
+                    break;
+                }
+            }
+
+            return res;
+        }
+
         public static bool? IsPointInPolygon(this Point pt, IEnumerable<Point> pathen)
         {
             //returns 0 if false, +1 if true, -1 if pt ON polygon boundary
@@ -352,8 +383,8 @@ namespace Route3D.Helpers
                 var ipNext = (finished ? first : path.Current);
                 if (Math.Abs(ipNext.Y - pt.Y) < Double.Epsilon)
                 {
-                    if ((Math.Abs(ipNext.X - pt.X) < Double.Epsilon) || (Math.Abs(ip.Y - pt.Y) < Double.Epsilon &&
-                                                                         ((ipNext.X > pt.X) == (ip.X < pt.X)))) return null;
+                    if ((Math.Abs(ipNext.X - pt.X) < Double.Epsilon) || (Math.Abs(ip.Y - pt.Y) < Double.Epsilon && ((ipNext.X > pt.X) == (ip.X < pt.X)))) 
+                        return null;
                 }
                 if ((ip.Y < pt.Y) != (ipNext.Y < pt.Y))
                 {

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using HelixToolkit.Wpf;
 using Route3D.Helpers;
@@ -103,7 +104,7 @@ namespace Route3D
 
             if (res != null)
             {
-                res = res.JoinModelsToOne();
+                res = res.JoinModelsToOne(MaterialHelper.CreateMaterial(Colors.Blue));
                 var model3DGroup = new Model3DGroup();
 
 
@@ -116,8 +117,14 @@ namespace Route3D
 
                 List<List<Point3D>> xpaths = null;
 
+                var ln = 0;
+
                 for (double i = bounds.Location.Z + bounds.Size.Z; i >= bounds.Location.Z; i -= step)
                 {
+                    ln++;
+
+                   
+
                     var modl = geom.Slice(new Point3D(0, 0, i - step), new Vector3D(0, 0, step), EPSILON);
                     
                     var des = modl.FindBottomContours(EPSILON);
@@ -179,8 +186,12 @@ namespace Route3D
 
                     xpaths = xpaths.ClipPaths(paths1, ClipType.Union, i, EPSILON).RemoveSmallPolygons(1, hstep*3, hstep).FixPointPaths();
 
+                  
+
                     var co = new ClipperOffset();
+
                     co.AddPaths(xpaths.ChangePointUnits(), JoinType.Round, EndType.ClosedPolygon);
+
 
                     var xpathsres = new List<List<Point3D>>();
 
@@ -200,7 +211,7 @@ namespace Route3D
 
                     xpathsres.JoinNearPoints(EPSILON);
 
-
+                    
                     foreach (var path in xpathsres)
                     {
                         var mb = new MeshBuilder();
@@ -210,9 +221,10 @@ namespace Route3D
                         model3DGroup.Children.Add(new GeometryModel3D {Geometry = mb.ToMesh(true), Material = MaterialHelper.CreateMaterial(GeometryHelper.GoodColors[rand.Next(GeometryHelper.GoodColors.Count - 1)]), Transform = new TranslateTransform3D(0, 0, /*scnt++*/0)});
                     }
 
-                    break;
                 }
 
+
+                model3DGroup.Children.Add(res);
 
                 res = model3DGroup;
             }
