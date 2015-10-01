@@ -101,7 +101,7 @@ namespace Route3D.Helpers
 
         public static MeshGeometry3D Slice(this MeshGeometry3D geom, Point3D start, Vector3D step, double? epsilon = null)
         {
-            var res = MeshGeometryHelper.Cut(MeshGeometryHelper.Cut(geom, start, step), start + step, -step);
+            var res = MeshGeometryHelper.Cut(MeshGeometryHelper.Cut(geom, start, step / step.Length), start + step, -step / step.Length);
 
             if (epsilon.HasValue)
                 res.JoinNearIndices(epsilon.Value);
@@ -503,7 +503,7 @@ namespace Route3D.Helpers
             return paths;
         }
 
-        public static List<List<int>> FixMergeIndexPaths(this List<List<int>> paths, Point3DCollection poss, double eps)
+        public static List<List<int>> FixMergeIndexPaths(this List<List<int>> paths, IList<Point3D> poss, double eps)
         {
             List<List<int>> pathsnc;
 
@@ -638,6 +638,16 @@ namespace Route3D.Helpers
                             j--;
                         }
                     }
+
+                    for (int i = 0; i < path.Count - 2; i++)
+                    {
+                        if (Math.Abs(path[i].DistanceTo(path[i + 1]) + path[i + 1].DistanceTo(path[i + 2]) - path[i].DistanceTo(path[i + 2])) < eps)
+                        {
+                            path.RemoveAt(i + 1);
+                            i--;
+                        }
+
+                    }
                 }
 
             }
@@ -649,7 +659,7 @@ namespace Route3D.Helpers
             return JoinNearIndices(geometry.TriangleIndices, geometry.Positions, eps);
         }
 
-        public static Dictionary<int, int> JoinNearIndices(this Int32Collection indices, Point3DCollection positions, double eps)
+        public static Dictionary<int, int> JoinNearIndices(this IList<int> indices, IList<Point3D> positions, double eps)
         {
             if (indices.Count == 0)
                 return new Dictionary<int, int>();

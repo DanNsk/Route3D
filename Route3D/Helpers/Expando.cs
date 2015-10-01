@@ -151,15 +151,14 @@ namespace Route3D.Helpers
             if (miArray.Length > 0)
             {
                 var mi = miArray[0];
-                if (mi.MemberType == MemberTypes.Property)
+                switch (mi.MemberType)
                 {
-                    result = ((PropertyInfo) mi).GetValue(inst, null);
-                    return true;
-                }
-                else if (mi.MemberType == MemberTypes.Field)
-                {
-                    result = ((FieldInfo)mi).GetValue(inst);
-                    return true;
+                    case MemberTypes.Property:
+                        result = ((PropertyInfo) mi).GetValue(inst, null);
+                        return true;
+                    case MemberTypes.Field:
+                        result = ((FieldInfo)mi).GetValue(inst);
+                        return true;
                 }
             }
 
