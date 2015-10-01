@@ -1,10 +1,9 @@
-﻿using System;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Dynamic;
 using System.Runtime.CompilerServices;
 using Route3D.Annotations;
 
-namespace Route3D.Helpers
+namespace Route3D.Helpers.WPF
 {
     public class ObservableExpando : Expando, INotifyPropertyChanged
     {

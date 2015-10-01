@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Reflection;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Xml;
@@ -20,7 +19,7 @@ namespace Route3D.Helpers
     internal static class SerializationHelpers
     {
         /// <summary>
-        /// Serializes an object instance to a file.
+        ///     Serializes an object instance to a file.
         /// </summary>
         /// <param name="instance">the object instance to serialize</param>
         /// <param name="fileName"></param>
@@ -28,22 +27,24 @@ namespace Route3D.Helpers
         /// <returns></returns>
         public static bool SerializeObject(object instance, string fileName, bool binarySerialization)
         {
-            bool retVal = true;
+            var retVal = true;
 
             if (!binarySerialization)
             {
                 XmlTextWriter writer = null;
                 try
                 {
-                    XmlSerializer serializer =
+                    var serializer =
                         new XmlSerializer(instance.GetType());
 
                     // Create an XmlTextWriter using a FileStream.
                     Stream fs = new FileStream(fileName, FileMode.Create);
-                    writer = new XmlTextWriter(fs, new UTF8Encoding());
-                    writer.Formatting = Formatting.Indented;
-                    writer.IndentChar = ' ';
-                    writer.Indentation = 3;
+                    writer = new XmlTextWriter(fs, new UTF8Encoding())
+                    {
+                        Formatting = Formatting.Indented,
+                        IndentChar = ' ',
+                        Indentation = 3
+                    };
 
                     // Serialize using the XmlTextWriter.
                     serializer.Serialize(writer, instance);
@@ -64,7 +65,7 @@ namespace Route3D.Helpers
                 Stream fs = null;
                 try
                 {
-                    BinaryFormatter serializer = new BinaryFormatter();
+                    var serializer = new BinaryFormatter();
                     fs = new FileStream(fileName, FileMode.Create);
                     serializer.Serialize(fs, instance);
                 }
@@ -83,23 +84,23 @@ namespace Route3D.Helpers
         }
 
         /// <summary>
-        /// Overload that supports passing in an XML TextWriter. 
+        ///     Overload that supports passing in an XML TextWriter.
         /// </summary>
         /// <remarks>
-        /// Note the Writer is not closed when serialization is complete 
-        /// so the caller needs to handle closing.
+        ///     Note the Writer is not closed when serialization is complete
+        ///     so the caller needs to handle closing.
         /// </remarks>
         /// <param name="instance">object to serialize</param>
-        /// <param name="writer">XmlTextWriter instance to write output to</param>       
+        /// <param name="writer">XmlTextWriter instance to write output to</param>
         /// <param name="throwExceptions">Determines whether false is returned on failure or an exception is thrown</param>
         /// <returns></returns>
         public static bool SerializeObject(object instance, XmlTextWriter writer, bool throwExceptions)
         {
-            bool retVal = true;
+            var retVal = true;
 
             try
             {
-                XmlSerializer serializer =
+                var serializer =
                     new XmlSerializer(instance.GetType());
 
                 // Create an XmlTextWriter using a FileStream.
@@ -123,9 +124,8 @@ namespace Route3D.Helpers
             return retVal;
         }
 
-
         /// <summary>
-        /// Serializes an object into an XML string variable for easy 'manual' serialization
+        ///     Serializes an object into an XML string variable for easy 'manual' serialization
         /// </summary>
         /// <param name="instance">object to serialize</param>
         /// <param name="xmlResultString">resulting XML string passed as an out parameter</param>
@@ -136,7 +136,7 @@ namespace Route3D.Helpers
         }
 
         /// <summary>
-        /// Serializes an object into a string variable for easy 'manual' serialization
+        ///     Serializes an object into a string variable for easy 'manual' serialization
         /// </summary>
         /// <param name="instance"></param>
         /// <param name="xmlResultString">Out parm that holds resulting XML string</param>
@@ -145,9 +145,9 @@ namespace Route3D.Helpers
         public static bool SerializeObject(object instance, out string xmlResultString, bool throwExceptions)
         {
             xmlResultString = string.Empty;
-            MemoryStream ms = new MemoryStream();
+            var ms = new MemoryStream();
 
-            XmlTextWriter writer = new XmlTextWriter(ms, new UTF8Encoding());
+            var writer = new XmlTextWriter(ms, new UTF8Encoding());
 
             if (!SerializeObject(instance, writer, throwExceptions))
             {
@@ -155,7 +155,7 @@ namespace Route3D.Helpers
                 return false;
             }
 
-            xmlResultString = Encoding.UTF8.GetString(ms.ToArray(), 0, (int)ms.Length);
+            xmlResultString = Encoding.UTF8.GetString(ms.ToArray(), 0, (int) ms.Length);
 
             ms.Close();
             writer.Close();
@@ -163,22 +163,21 @@ namespace Route3D.Helpers
             return true;
         }
 
-
         /// <summary>
-        /// Serializes an object instance to a file.
+        ///     Serializes an object instance to a file.
         /// </summary>
         /// <param name="instance">the object instance to serialize</param>
-        /// <param name="Filename"></param>
-        /// <param name="BinarySerialization">determines whether XML serialization or binary serialization is used</param>
+        /// <param name="resultBuffer"></param>
+        /// <param name="throwExceptions">determines whether XML serialization or binary serialization is used</param>
         /// <returns></returns>
         public static bool SerializeObject(object instance, out byte[] resultBuffer, bool throwExceptions = false)
         {
-            bool retVal = true;
+            var retVal = true;
 
             MemoryStream ms = null;
             try
             {
-                BinaryFormatter serializer = new BinaryFormatter();
+                var serializer = new BinaryFormatter();
                 ms = new MemoryStream();
                 serializer.Serialize(ms, instance);
             }
@@ -202,42 +201,34 @@ namespace Route3D.Helpers
         }
 
         /// <summary>
-        /// Serializes an object to an XML string. Unlike the other SerializeObject overloads
-        /// this methods *returns a string* rather than a bool result!
+        ///     Serializes an object to an XML string. Unlike the other SerializeObject overloads
+        ///     this methods *returns a string* rather than a bool result!
         /// </summary>
         /// <param name="instance"></param>
         /// <param name="throwExceptions">Determines if a failure throws or returns null</param>
         /// <returns>
-        /// null on error otherwise the Xml String.         
+        ///     null on error otherwise the Xml String.
         /// </returns>
         /// <remarks>
-        /// If null is passed in null is also returned so you might want
-        /// to check for null before calling this method.
+        ///     If null is passed in null is also returned so you might want
+        ///     to check for null before calling this method.
         /// </remarks>
         public static string SerializeObjectToString(object instance, bool throwExceptions = false)
         {
-            string xmlResultString = string.Empty;
+            string xmlResultString;
 
-            if (!SerializeObject(instance, out xmlResultString, throwExceptions))
-                return null;
-
-            return xmlResultString;
+            return !SerializeObject(instance, out xmlResultString, throwExceptions) ? null : xmlResultString;
         }
 
         public static byte[] SerializeObjectToByteArray(object instance, bool throwExceptions = false)
         {
-            byte[] byteResult = null;
+            byte[] byteResult;
 
-            if (!SerializeObject(instance, out byteResult))
-                return null;
-
-            return byteResult;
+            return !SerializeObject(instance, out byteResult) ? null : byteResult;
         }
 
-
-
         /// <summary>
-        /// Deserializes an object from file and returns a reference.
+        ///     Deserializes an object from file and returns a reference.
         /// </summary>
         /// <param name="fileName">name of the file to serialize to</param>
         /// <param name="objectType">The Type of the object. Use typeof(yourobject class)</param>
@@ -249,7 +240,7 @@ namespace Route3D.Helpers
         }
 
         /// <summary>
-        /// Deserializes an object from file and returns a reference.
+        ///     Deserializes an object from file and returns a reference.
         /// </summary>
         /// <param name="fileName">name of the file to serialize to</param>
         /// <param name="objectType">The Type of the object. Use typeof(yourobject class)</param>
@@ -258,18 +249,16 @@ namespace Route3D.Helpers
         /// <returns>Instance of the deserialized object or null. Must be cast to your object type</returns>
         public static object DeSerializeObject(string fileName, Type objectType, bool binarySerialization, bool throwExceptions)
         {
-            object instance = null;
+            object instance;
 
             if (!binarySerialization)
             {
-
                 XmlReader reader = null;
-                XmlSerializer serializer = null;
                 FileStream fs = null;
                 try
                 {
                     // Create an instance of the XmlSerializer specifying type and namespace.
-                    serializer = new XmlSerializer(objectType);
+                    var serializer = new XmlSerializer(objectType);
 
                     // A FileStream is needed to read the XML document.
                     fs = new FileStream(fileName, FileMode.Open);
@@ -277,12 +266,11 @@ namespace Route3D.Helpers
 
                     instance = serializer.Deserialize(reader);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     if (throwExceptions)
                         throw;
 
-                    string message = ex.Message;
                     return null;
                 }
                 finally
@@ -296,16 +284,13 @@ namespace Route3D.Helpers
             }
             else
             {
-
-                BinaryFormatter serializer = null;
                 FileStream fs = null;
 
                 try
                 {
-                    serializer = new BinaryFormatter();
+                    var serializer = new BinaryFormatter();
                     fs = new FileStream(fileName, FileMode.Open);
                     instance = serializer.Deserialize(fs);
-
                 }
                 catch
                 {
@@ -322,15 +307,15 @@ namespace Route3D.Helpers
         }
 
         /// <summary>
-        /// Deserialize an object from an XmlReader object.
+        ///     Deserialize an object from an XmlReader object.
         /// </summary>
         /// <param name="reader"></param>
         /// <param name="objectType"></param>
         /// <returns></returns>
         public static object DeSerializeObject(XmlReader reader, Type objectType)
         {
-            XmlSerializer serializer = new XmlSerializer(objectType);
-            object Instance = serializer.Deserialize(reader);
+            var serializer = new XmlSerializer(objectType);
+            var Instance = serializer.Deserialize(reader);
             reader.Close();
 
             return Instance;
@@ -338,12 +323,12 @@ namespace Route3D.Helpers
 
         public static object DeSerializeObject(string xml, Type objectType)
         {
-            XmlTextReader reader = new XmlTextReader(xml, XmlNodeType.Document, null);
+            var reader = new XmlTextReader(xml, XmlNodeType.Document, null);
             return DeSerializeObject(reader, objectType);
         }
 
         /// <summary>
-        /// Deseializes a binary serialized object from  a byte array
+        ///     Deseializes a binary serialized object from  a byte array
         /// </summary>
         /// <param name="buffer"></param>
         /// <param name="objectType"></param>
@@ -351,16 +336,14 @@ namespace Route3D.Helpers
         /// <returns></returns>
         public static object DeSerializeObject(byte[] buffer, Type objectType, bool throwExceptions = false)
         {
-            BinaryFormatter serializer = null;
             MemoryStream ms = null;
-            object Instance = null;
+            object Instance;
 
             try
             {
-                serializer = new BinaryFormatter();
+                var serializer = new BinaryFormatter();
                 ms = new MemoryStream(buffer);
                 Instance = serializer.Deserialize(ms);
-
             }
             catch
             {
@@ -378,27 +361,27 @@ namespace Route3D.Helpers
             return Instance;
         }
 
-
         /// <summary>
-        /// Returns a string of all the field value pairs of a given object.
-        /// Works only on non-statics.
+        ///     Returns a string of all the field value pairs of a given object.
+        ///     Works only on non-statics.
         /// </summary>
         /// <param name="instanc"></param>
         /// <param name="separator"></param>
+        /// <param name="type"></param>
         /// <returns></returns>
         public static string ObjectToString(object instanc, string separator, ObjectToStringTypes type)
         {
-            FieldInfo[] fi = instanc.GetType().GetFields();
+            var fi = instanc.GetType().GetFields();
 
-            string output = string.Empty;
+            var output = string.Empty;
 
             if (type == ObjectToStringTypes.Properties || type == ObjectToStringTypes.PropertiesAndFields)
             {
-                foreach (PropertyInfo property in instanc.GetType().GetProperties())
+                foreach (var property in instanc.GetType().GetProperties())
                 {
                     try
                     {
-                        output += property.Name + ":" + property.GetValue(instanc, null).ToString() + separator;
+                        output += property.Name + ":" + property.GetValue(instanc, null) + separator;
                     }
                     catch
                     {
@@ -409,11 +392,11 @@ namespace Route3D.Helpers
 
             if (type == ObjectToStringTypes.Fields || type == ObjectToStringTypes.PropertiesAndFields)
             {
-                foreach (FieldInfo field in fi)
+                foreach (var field in fi)
                 {
                     try
                     {
-                        output = output + field.Name + ": " + field.GetValue(instanc).ToString() + separator;
+                        output = output + field.Name + ": " + field.GetValue(instanc) + separator;
                     }
                     catch
                     {
@@ -423,6 +406,5 @@ namespace Route3D.Helpers
             }
             return output;
         }
-
     }
 }

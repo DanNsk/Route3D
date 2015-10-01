@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Windows.Input;
 
-namespace Route3D.Helpers
+namespace Route3D.Helpers.WPF
 {
     public class DelegateCommand : ICommand
     {

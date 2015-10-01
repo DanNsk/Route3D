@@ -1,4 +1,4 @@
-﻿namespace Route3D.Helpers
+﻿namespace Route3D.Helpers.WPF
 {
     public interface IFileDialogService
     {

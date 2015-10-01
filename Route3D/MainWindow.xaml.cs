@@ -1,8 +1,9 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Dynamic;
 using System.Windows;
-using System.Windows.Input;
-using Route3D.Helpers;
+using System.Windows.Controls;
+
 
 namespace Route3D
 {
@@ -15,43 +16,34 @@ namespace Route3D
         {
             InitializeComponent();
 
-            var viewModel = new ObservableExpando(new MainViewModel(new FileDialogService(), viewPort3d));
-            viewPort3d.RotateGesture = new MouseGesture(MouseAction.LeftClick);
-
-
-            viewModel.GetMember += (object inst, GetMemberBinder binder, out object result) =>
-            {
-                var name = binder.Name;
-                result = null;
-
-                if (binder.Name.EndsWith("Command"))
-                {
-                    name = name.Substring(0, binder.Name.Length - 7);
-
-                    var del = inst.GetFirstDelegateFromName<Action>(name);
-                    var can = inst.GetFirstDelegateFromName<Func<bool>>(name + "CanExecute");
-
-                    if (del != null)
-                        result = new DelegateCommand(del, can);
-                }
-
-                return result != null;
-            };
-
-
             SourceInitialized += (s, a) =>
             {
                 WindowState = WindowState.Maximized;
             };
 
-            Closing += (sender, args) =>
+            CancelEventHandler eh = (sender, args) =>
             {
-                viewModel.Dispose();
+                var page = frmMain.Content as Page;
+
+                if (page != null)
+                {
+                    var vm = page.DataContext as IDisposable;
+                    if (vm != null)
+                        vm.Dispose();
+                }
             };
 
-            
-            DataContext = viewModel;
-   
+            Closing += (sender, args) => eh(sender, args);
+            frmMain.Navigating += (sender, args) => eh(sender, args);
+
+            frmMain.Navigated += (sender, args) => {
+                var page = frmMain.Content as Page;
+
+                if (page != null)
+                {
+                    DataContext = page.DataContext;
+                }
+            };
         }
     }
 }

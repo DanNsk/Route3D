@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using HelixToolkit.Wpf;
 using Route3D.Helpers;
+using Route3D.Helpers.WPF;
 using Route3D.Properties;
 
 namespace Route3D

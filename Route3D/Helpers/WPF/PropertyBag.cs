@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Xml;
 using System.Xml.Serialization;
 
-namespace Route3D.Helpers
+namespace Route3D.Helpers.WPF
 {
 
     /// <summary>
