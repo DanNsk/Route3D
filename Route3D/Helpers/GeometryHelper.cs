@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Security.Cryptography.X509Certificates;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
@@ -216,10 +215,14 @@ namespace Route3D.Helpers
             return points.Where((x, i) => areas[i] > minArea && perimeters[i] > minPer && (!Double.IsNaN(minsides[i]) || minsides[i] > minSide)).ToList();
         }
 
+        public static double DistanceToSquared(this Point p1, Point p2)
+        {
+            return (p1.X - p2.X) * (p1.X - p2.X) + (p1.Y - p2.Y) * (p1.Y - p2.Y);
+        }
 
         public static double DistanceTo(this Point p1, Point p2)
         {
-            return Math.Sqrt((p1.X - p2.X) * (p1.X - p2.X) + (p1.Y - p2.Y) * (p1.Y - p2.Y));
+            return Math.Sqrt(DistanceToSquared(p1, p2));
         }
 
 

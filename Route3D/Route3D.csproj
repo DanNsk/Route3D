@@ -43,6 +43,9 @@
       <HintPath>..\packages\HelixToolkit.Wpf.2015.1.608\lib\net45\HelixToolkit.Wpf.dll</HintPath>
       <Private>True</Private>
     </Reference>
+    <Reference Include="netDxf">
+      <HintPath>..\packages\netDxf\netDxf.dll</HintPath>
+    </Reference>
     <Reference Include="PresentationUI, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL" />
     <Reference Include="ReachFramework" />
     <Reference Include="System" />

@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using HelixToolkit.Wpf;
+using netDxf;
 using Route3D.Helpers;
 using Route3D.Helpers.WPF;
 using Route3D.Properties;
@@ -19,6 +20,8 @@ namespace Route3D
     public class MainViewModel : DispatchedObservable
     {
         private const string OPEN_FILE_FILTER = "3D model files (*.3ds;*.obj;*.lwo;*.stl)|*.3ds;*.obj;*.objz;*.lwo;*.stl";
+        private const string OPEN_FLAT_FILE_FILTER = "2D Model files (*.dxf)|*.dxf";
+
         private const string SAVE_FILE_FILTER = "GCODE File (*.gcode)|*.gcode";
         public const double EPSILON = 1e-3;
         public const double DRILL_STEP = 25.4/8/2;
@@ -133,6 +136,70 @@ namespace Route3D
             if (!string.IsNullOrEmpty(path))
             {
                 CurrentModelPath = path;
+            }
+        }
+
+        private async Task FlatFileOpen()
+        {
+            var path = fileDialogService.OpenFileDialog("models", null, OPEN_FLAT_FILE_FILTER, ".dxf");
+
+
+            if (!string.IsNullOrEmpty(path))
+            {
+                var doc = DxfDocument.Load(path);
+
+                var cp = new List<List<Point3D>>();
+
+                var dist = 0.5;
+
+                foreach (var line in doc.Lines)
+                {
+                    cp.Add(new List<Point3D> { new Point3D(line.StartPoint.X, line.StartPoint.Y, line.StartPoint.Z), new Point3D(line.EndPoint.X, line.EndPoint.Y, line.EndPoint.Z) });
+                }
+
+                foreach (var line in doc.Arcs)
+                {
+
+                    var dang = Math.Abs(line.StartAngle - line.EndAngle)*Math.PI/180.0;
+
+                    var seg = Math.Max((int)Math.Ceiling(line.Radius * dang / dist), 1);
+                    
+                    var pl = line.ToPolyline(seg);
+
+                    cp.Add(pl.PoligonalVertexes(seg, EPSILON, EPSILON).Select(poligonalVertex => new Point3D(poligonalVertex.X, poligonalVertex.Y, line.Center.Z)).ToList());
+                }
+
+                foreach (var line in doc.Circles)
+                {
+                    
+
+                    var seg = Math.Max((int)Math.Ceiling(line.Radius * Math.PI / dist), 1);
+
+                    var pl = line.ToPolyline(seg);
+
+                    cp.Add(pl.PoligonalVertexes(seg, EPSILON, EPSILON).Select(poligonalVertex => new Point3D(poligonalVertex.X, poligonalVertex.Y, line.Center.Z)).ToList());
+                }
+
+                foreach (var line in doc.Polylines)
+                {
+                    cp.Add(line.Vertexes.Select(poligonalVertex => new Point3D(poligonalVertex.Location.X, poligonalVertex.Location.Y, poligonalVertex.Location.Z)).ToList());
+                }
+
+                foreach (var line in doc.LwPolylines)
+                {
+                    if (line.Vertexes.Count < 2)
+                        continue;
+
+                    var fdist = new Point(line.Vertexes[0].Location.X, line.Vertexes[0].Location.Y).DistanceTo(new Point(line.Vertexes.Last().Location.X, line.Vertexes.Last().Location.Y));
+
+                    cp.Add(line.PoligonalVertexes(Math.Max((int)Math.Ceiling(fdist / dist), 2), EPSILON, EPSILON).Select(poligonalVertex => new Point3D(poligonalVertex.X, poligonalVertex.Y, line.Elevation)).ToList());
+                }
+
+
+                cp.JoinNearPoints(EPSILON);
+
+                CurrentPaths = cp;
+
             }
         }
 
@@ -274,6 +341,8 @@ namespace Route3D
                     }
                 }
 
+
+                
 
                 var paths1 = paths.FixMergeIndexPaths(points, EPSILON).Select(x => x.Select(y => points[y]).ToList()).ToList();
 

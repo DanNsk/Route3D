@@ -13,6 +13,8 @@
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
                 <MenuItem Header="_Open..." Command="{Binding FileOpenCommand}"/>
+                <MenuItem Header="O_pen Contour..." Command="{Binding FlatFileOpenCommand}"/>
+
                 <MenuItem Header="_Save..." Command="{Binding FileSaveCommand}"/>
 
                 <Separator/>
