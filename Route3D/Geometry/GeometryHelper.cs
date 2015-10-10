@@ -6,8 +6,9 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using HelixToolkit.Wpf;
+using Route3D.Helpers;
 
-namespace Route3D.Helpers
+namespace Route3D.Geometry
 {
     public static class GeometryHelper
     {

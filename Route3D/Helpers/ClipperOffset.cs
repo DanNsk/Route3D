@@ -35,6 +35,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
+using Route3D.Geometry;
 
 namespace Route3D.Helpers
 {

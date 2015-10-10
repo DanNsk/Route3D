@@ -75,6 +75,7 @@
     </ApplicationDefinition>
     <Compile Include="Helpers\ClipperOffset.cs" />
     <Compile Include="Helpers\Clipper.cs" />
+    <Compile Include="Helpers\DelegatedComparer.cs" />
     <Compile Include="Helpers\GeneralHelpers.cs" />
     <Compile Include="Helpers\Expando.cs" />
     <Compile Include="Helpers\WPF\DelegateCommand.cs" />
@@ -85,6 +86,10 @@
     <Compile Include="Helpers\WPF\ObservableExpando.cs" />
     <Compile Include="Helpers\WPF\PropertyBag.cs" />
     <Compile Include="Helpers\SerializationHelpers.cs" />
+    <Compile Include="Geometry\D2\PointPath.cs" />
+    <Compile Include="Geometry\D3\Point3DPath.cs" />
+    <Compile Include="Geometry\HierarchyItem.cs" />
+    <Compile Include="Geometry\D2\DXFImporter.cs" />
     <Compile Include="MainViewModel.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -94,7 +99,7 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Helpers\GeometryHelper.cs" />
+    <Compile Include="Geometry\GeometryHelper.cs" />
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
@@ -136,6 +141,7 @@
   <ItemGroup>
     <None Include="App.config" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
