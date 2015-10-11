@@ -9,8 +9,6 @@ namespace Route3D.Geometry.D2
 {
     public class DXFImporter
     {
-       
-
         public PointPath ImportPath(string path)
         {
             var root = new PointPath();

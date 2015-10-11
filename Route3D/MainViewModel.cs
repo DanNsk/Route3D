@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using HelixToolkit.Wpf;
@@ -26,7 +27,7 @@ namespace Route3D
 
         private const string SAVE_FILE_FILTER = "GCODE File (*.gcode)|*.gcode";
         public const double EPSILON = 1e-3;
-        public const double DRILL_STEP = 25.4/8/2;
+        public const double DRILL_STEP = 25.4/8/2 * 0.85;
         private static readonly Size3D WORK_SIZE = new Size3D(240.0, 220.0, 90.0);
         private readonly IFileDialogService fileDialogService;
         public readonly ObservableCollection<Point3D> GridLinePoints = new ObservableCollection<Point3D>(GeometryHelper.GenerateGridLines(WORK_SIZE));
@@ -148,9 +149,20 @@ namespace Route3D
 
             if (!string.IsNullOrEmpty(path))
             {
-                var cp = new DXFImporter().ImportPath(path).FlattenHierarchy();
+                var cpx = new DXFImporter().ImportPath(path);
 
-                CurrentPaths = cp.Select((x, i) => x.Select(y => new Point3D(y.X, y.Y, 0)).ToList()).ToList();
+                var ctx = cpx.Center;
+
+                cpx.MoveBy(new Point(-ctx.X, -ctx.Y));
+
+                var cp = cpx.FlattenHierarchy();
+
+                var co = new ClipperOffset();
+
+                co.AddPaths(cp.Select(x => x.Select(y => y).ToList()).ToList(), JoinType.Round, EndType.ClosedPolygon);
+
+
+                CurrentPaths = co.Execute(DRILL_STEP,EPSILON).Select((x, i) => x.Select(y => new Point3D(y.X, y.Y, 0)).ToList()).ToList();
 
             }
         }
@@ -177,8 +189,8 @@ namespace Route3D
                 file.WriteLine("G21");
 
                 double safez = 0;
-                
-                Dispatch(() => { safez = CurrentModel.Bounds.Location.Z + CurrentModel.Bounds.SizeZ + 10; });
+
+                Dispatch(() => { safez = CurrentModel == null ? 10.0 : CurrentModel.Bounds.Location.Z + CurrentModel.Bounds.SizeZ + 10; });
                 var zsp = 70;
                 var xysp = 200;
 

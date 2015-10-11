@@ -32,6 +32,20 @@ namespace Route3D.Geometry
             set;
         }
 
+
+        public T Center 
+        {
+            get
+            {
+                return CalcCenter(FlattenHierarchy().SelectMany(x=>x));
+            }
+        }
+
+        protected virtual T CalcCenter(IEnumerable<T> union)
+        {
+            return default(T);
+        }
+
         public double Epsilon
         {
             get
@@ -102,6 +116,24 @@ namespace Route3D.Geometry
                     i--;
                 }
             }
+        }
+
+        public virtual void MoveBy(T delta)
+        {
+            for (int i = 0; i < Count; i++)
+            {
+                this[i] = MoveItemBy(this[i], delta);
+            }
+
+            foreach (var ch in Children)
+            {
+                ch.MoveBy(delta);
+            }
+        }
+
+        protected virtual T MoveItemBy(T x, T delta)
+        {
+            return x;
         }
 
         public void MergeLevelCorrectChildren(double higheps)

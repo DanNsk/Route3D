@@ -1,4 +1,7 @@
-﻿using System.Windows;
+﻿using System.Collections.Generic;
+using System.Linq;
+using System.Security.Cryptography.X509Certificates;
+using System.Windows;
 
 namespace Route3D.Geometry.D2
 {
@@ -26,6 +29,34 @@ namespace Route3D.Geometry.D2
             var val = itm.IsPolygonInPolygon(this);
 
             return val.HasValue && val.Value;
+        }
+
+        protected override Point CalcCenter(IEnumerable<Point> union)
+        {
+            double? minx = null;
+            double? maxx = null;
+            double? miny = null;
+            double? maxy = null;
+ 
+            foreach (var v in union)
+            {
+                if (!minx.HasValue || minx > v.X)
+                    minx = v.X;
+                if (!miny.HasValue || miny > v.Y)
+                    miny = v.Y;
+
+                if (!maxx.HasValue || maxx < v.X)
+                    maxx = v.X;
+                if (!maxy.HasValue || maxy < v.Y)
+                    maxy = v.Y;
+            }
+
+            return !minx.HasValue ? new Point(0, 0) : new Point((minx.Value + maxx.Value) / 2, (miny.Value + maxy.Value) / 2);
+        }
+
+        protected override Point MoveItemBy(Point x, Point delta)
+        {
+            return new Point(x.X + delta.X, x.Y + delta.Y);
         }
     }
 }

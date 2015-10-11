@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Media.Media3D;
 using HelixToolkit.Wpf;
@@ -54,6 +55,41 @@ namespace Route3D.Geometry.D3
             }
 
             return false;
+        }
+
+        protected override Point3D CalcCenter(IEnumerable<Point3D> union)
+        {
+            double? minx = null;
+            double? maxx = null;
+            double? miny = null;
+            double? maxy = null;
+            double? minz = null;
+            double? maxz = null;
+
+            foreach (var v in union)
+            {
+                if (!minx.HasValue || minx > v.X)
+                    minx = v.X;
+                if (!miny.HasValue || miny > v.Y)
+                    miny = v.Y;
+
+                if (!maxx.HasValue || maxx < v.X)
+                    maxx = v.X;
+                if (!maxy.HasValue || maxy < v.Y)
+                    maxy = v.Y;
+
+                if (!maxz.HasValue || maxz < v.Z)
+                    maxz = v.Z;
+                if (!minz.HasValue || maxz > v.Z)
+                    minz = v.Z;
+            }
+
+            return !minx.HasValue ? new Point3D(0, 0, 0) : new Point3D((minx.Value + maxx.Value) / 2, (miny.Value + maxy.Value) / 2, (minz.Value + maxz.Value) / 2);
+        }
+
+        protected override Point3D MoveItemBy(Point3D x, Point3D delta)
+        {
+            return new Point3D(x.X + delta.X, x.Y + delta.Y, x.Y + delta.Z);
         }
     }
 }
