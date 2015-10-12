@@ -1,7 +1,6 @@
 ﻿using Microsoft.Win32;
-using Route3D.Helpers.WPF;
 
-namespace Route3D.Helpers
+namespace Route3D.Helpers.WPF
 {
     public class FileDialogService : IFileDialogService
     {

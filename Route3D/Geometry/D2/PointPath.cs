@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using System.Windows;
@@ -8,6 +9,17 @@ namespace Route3D.Geometry.D2
     public class PointPath : HierarchyItem<Point>
     {
         public static Point Zero = new Point(0, 0);
+
+        public PointPath()
+        {
+            
+        }
+
+        public PointPath(IEnumerable<Point> pts, IEnumerable<HierarchyItem<Point>> chl)
+            : base(pts, chl)
+        {
+            
+        }
 
         protected override ulong CreateItemHash(Point p, double eps)
         {
@@ -31,7 +43,7 @@ namespace Route3D.Geometry.D2
             return val.HasValue && val.Value;
         }
 
-        protected override Point CalcCenter(IEnumerable<Point> union)
+        protected override Tuple<Point, Point> CalcBounds(IEnumerable<Point> union)
         {
             double? minx = null;
             double? maxx = null;
@@ -51,7 +63,7 @@ namespace Route3D.Geometry.D2
                     maxy = v.Y;
             }
 
-            return !minx.HasValue ? new Point(0, 0) : new Point((minx.Value + maxx.Value) / 2, (miny.Value + maxy.Value) / 2);
+            return !minx.HasValue ? null : Tuple.Create(new Point(minx.Value, miny.Value), new Point(maxx.Value, maxy.Value));
         }
 
         protected override Point MoveItemBy(Point x, Point delta)

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Windows;
 
 namespace Route3D.Geometry
 {
@@ -26,6 +27,19 @@ namespace Route3D.Geometry
             epsilon = 1e-6;
         }
 
+        public HierarchyItem(IEnumerable<T> inc, IEnumerable<HierarchyItem<T>> chl)
+            : this()
+        {
+            if (inc != null)
+                AddRange(inc);
+
+            if (chl != null)
+            {
+                foreach (var ch in chl)
+                    Children.Add(ch);
+            }
+        }
+
         public HierarchyItem<T> Parent
         {
             get;
@@ -33,17 +47,17 @@ namespace Route3D.Geometry
         }
 
 
-        public T Center 
+        public Tuple<T, T> Bounds 
         {
             get
             {
-                return CalcCenter(FlattenHierarchy().SelectMany(x=>x));
+                return CalcBounds(FlattenHierarchy().SelectMany(x=>x));
             }
         }
 
-        protected virtual T CalcCenter(IEnumerable<T> union)
+        protected virtual Tuple<T,T> CalcBounds(IEnumerable<T> union)
         {
-            return default(T);
+            return null;
         }
 
         public double Epsilon
@@ -331,7 +345,7 @@ namespace Route3D.Geometry
 
         public HierarchyItem<T> CreateChild(IEnumerable<T> items = null)
         {
-            HierarchyItem<T> res = null;
+            HierarchyItem<T> res;
 
             try
             {

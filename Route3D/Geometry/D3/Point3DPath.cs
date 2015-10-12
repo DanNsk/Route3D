@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media.Media3D;
@@ -9,6 +10,18 @@ namespace Route3D.Geometry.D3
     public class Point3DPath : HierarchyItem<Point3D>
     {
         public static Point3D Zero = new Point3D(0, 0, 0);
+
+        public Point3DPath()
+        {
+            
+        }
+
+        public Point3DPath(IEnumerable<Point3D> pts, IEnumerable<HierarchyItem<Point3D>> chl)
+            : base(pts, chl)
+        {
+            
+        }
+
 
         protected override ulong CreateItemHash(Point3D p, double eps)
         {
@@ -57,7 +70,7 @@ namespace Route3D.Geometry.D3
             return false;
         }
 
-        protected override Point3D CalcCenter(IEnumerable<Point3D> union)
+        protected override Tuple<Point3D,Point3D> CalcBounds(IEnumerable<Point3D> union)
         {
             double? minx = null;
             double? maxx = null;
@@ -84,7 +97,7 @@ namespace Route3D.Geometry.D3
                     minz = v.Z;
             }
 
-            return !minx.HasValue ? new Point3D(0, 0, 0) : new Point3D((minx.Value + maxx.Value) / 2, (miny.Value + maxy.Value) / 2, (minz.Value + maxz.Value) / 2);
+            return !minx.HasValue ? null : Tuple.Create(new Point3D(minx.Value, miny.Value, minz.Value), new Point3D(maxx.Value, maxy.Value, maxz.Value));
         }
 
         protected override Point3D MoveItemBy(Point3D x, Point3D delta)

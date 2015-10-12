@@ -73,13 +73,20 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Geometry\D2\GCodeExporter.cs" />
+    <Compile Include="Geometry\D3\StlImporter.cs" />
+    <Compile Include="Geometry\D3\GCode3DExporter.cs" />
+    <Compile Include="Geometry\D3\Point3DImporterExporterFactory.cs" />
+    <Compile Include="Geometry\IHierarchyItemExporter.cs" />
+    <Compile Include="Geometry\IHierarchyItemImporter.cs" />
+    <Compile Include="Geometry\D2\PointImporterExporterFactory.cs" />
     <Compile Include="Helpers\ClipperOffset.cs" />
     <Compile Include="Helpers\Clipper.cs" />
     <Compile Include="Helpers\DelegatedComparer.cs" />
     <Compile Include="Helpers\GeneralHelpers.cs" />
     <Compile Include="Helpers\Expando.cs" />
     <Compile Include="Helpers\WPF\DelegateCommand.cs" />
-    <Compile Include="Helpers\FileDialogService.cs" />
+    <Compile Include="Helpers\WPF\FileDialogService.cs" />
     <Compile Include="Helpers\WPF\DispatchedObservable.cs" />
     <Compile Include="Helpers\WPF\IFileDialogService.cs" />
     <Compile Include="Helpers\WPF\Observable.cs" />
@@ -89,7 +96,7 @@
     <Compile Include="Geometry\D2\PointPath.cs" />
     <Compile Include="Geometry\D3\Point3DPath.cs" />
     <Compile Include="Geometry\HierarchyItem.cs" />
-    <Compile Include="Geometry\D2\DXFImporter.cs" />
+    <Compile Include="Geometry\D2\DXFImporterExporter.cs" />
     <Compile Include="MainViewModel.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
